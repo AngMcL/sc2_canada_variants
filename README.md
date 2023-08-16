@@ -2,7 +2,7 @@
 Angela McLaughlin et al. 
 
 ## Description
-Scripts needed to reproduce our analysis as described in the manuscript, 'Effectiveness of Canadian travel restrictions in reducing burden of SARS-CoV-2 variants of concern
+Scripts needed to reproduce our analysis as described in the manuscript, 'Effectiveness of Canadian travel restrictions in reducing burden of SARS-CoV-2 variants of concern'
 pre-print to be made available at [medRxiv](https://www.medrxiv.org).
 
 ## Dependencies

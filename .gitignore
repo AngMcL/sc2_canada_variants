@@ -1,0 +1,8 @@
+.RProfile
+.RData
+.REnv
+.Rapp.history
+.RDataTmp
+.RUserdata
+.Rproj.user/
+.Renviron
