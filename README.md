@@ -28,7 +28,7 @@ ape 5.7-1, Biostrings 2.68.1, phytools 1.9-16, phangorn 2.11.1, coronavirus 0.4.
 * problematic sites https://github.com/W-L/ProblematicSites_SARS-CoV2/blob/master/problematic_sites_sarsCov2.vcf
 
 ## Usage
-The readme files in the individual subfolders have details on running scripts
+The readme files in the individual subfolders have details on running scripts. This repo does not include a reproducible example with fake data, as in the previous repo for the first two waves of SARS-CoV-2, and GISAID data cannot be shared publicly, therefore inputs reference files not included in the repo. Inputs and output would have to be modified to run the script locally.
 
 ## Thank you
 * GISAID.org

@@ -1,0 +1,405 @@
+---
+title: "merge partitions"
+author: "Angela"
+date: '2022-08-31'
+output: html_document
+---
+
+# Objectives
+* merge the partitioned metadata across clades
+* little cleanup incl adding year-month, completing incomplete dates (sample day at random for canada meta)
+* separate global and Canadian metadata
+* make color schemes for VOCs and geos
+* export metadata
+
+```{r setup, include=FALSE}
+library(knitr)
+library(tidyverse)
+library(stringr)
+library(Biostrings)
+library(lubridate)
+library(gtools)
+library(RColorBrewer)
+library(stringi)
+library(devtools)
+library(grid)
+library(gridExtra) 
+```
+
+## Ins and Outs
+```{r}
+data.date<-"2022-03-22" # the day of most recent sample
+
+meta.in.folder<-"../00_cleanData/GISAID/metadata/03_cleaner"
+meta.in.list<-list.files(meta.in.folder,full.names = T, pattern="cleaner.csv") %>% mixedsort()
+
+#previously inferred dates for early Canadian sequences: take these as truth
+meta.inferred.dates<-"../../20210301_phylogeo/03_ancestral/ft_ace_out/20210301_can100_1.meta.InferredDatesLSD.csv"
+
+#metadata associated with reference sequence, wuhan-hu-1
+wuhan.meta.in<-"../00_cleanData/GISAID/wuhan-hu-1/gisaid_hcov-19_2022_06_07_20_1.tsv"
+
+#number of partitions
+n.P<-length(meta.in.list)
+
+#outputs, clean and separated can/global metadata
+f.out<-"CleanMeta_PreSubsamp"
+if(!dir.exists(f.out)){dir.create(f.out)}
+
+meta.glob.out<-paste(f.out,"/global_meta.csv",sep="")
+meta.can.out<-paste(f.out,"/canada_meta.csv",sep="")
+
+#outputs, colors and lookup tables
+f.out2<-"colors_out"
+if(!dir.exists(f.out2)){dir.create(f.out2)} 
+
+variant.colors.out<-paste(f.out2,"/variant_colors.tsv",sep="")
+var.df.out<-paste(f.out2,"/variant.df.csv",sep="")
+lookup.geo.out<-paste(f.out,"/lookup.geo.csv",sep="")
+global.colors.out<-paste(f.out,"/global.colors.tsv",sep="")
+
+#function to check colors
+colortest<-function(vector){
+  n<-length(vector)
+  return(plot(1:n,1:n,col=vector,pch=15))
+}
+
+```
+
+## Read in and link the metadata (in partitions)
+```{r}
+#list with element for each partition of gisaid clade
+meta.l<-replicate(n.P,vector())
+
+#clades
+clades<-c()
+for (k in 1:length(meta.in.list)){
+  c1<-str_replace(last(unlist(str_split(meta.in.list[[k]],"/"))),"_cleaner.csv","")
+  clades<-c(clades,c1)
+}
+names(meta.l)<-clades
+
+for (k in 1:n.P){
+  #META
+  meta.l[[k]]<-read.csv(meta.in.list[k])
+
+  #change a column name
+  colnames(meta.l[[k]])[which(colnames(meta.l[[k]])=="Pango.lineage")]<-"Lineage"
+  
+  #dates 
+  colnames(meta.l[[k]])[which(colnames(meta.l[[k]])=="Collection.date")]<-"date"
+  
+  #need to make region, country,division
+  meta.l[[k]]<-tidyr::separate(meta.l[[k]],Location,sep="/",into=c("region","country","division"))
+  
+  #note that some have more or less than 3 locations, but should discard extra off the tail, or leave division blank
+  #remove white space at beginning and end of location names
+  meta.l[[k]]$region<-str_trim(meta.l[[k]]$region)
+  meta.l[[k]]$country<-str_trim(meta.l[[k]]$country)
+  #couple manual changes
+  meta.l[[k]]$country<-str_replace_all(meta.l[[k]]$country,"USA\\? Ohio","USA")
+  meta.l[[k]]$country<-str_replace_all(meta.l[[k]]$country,"Cote d\\'Ivoire","Cote dIvoire")
+  meta.l[[k]]$country<-str_replace_all(meta.l[[k]]$country,"Usa","USA")
+  meta.l[[k]]$division<-str_trim(meta.l[[k]]$division)
+
+  #check no duplicate names
+  length(meta.l[[k]]$new.names)==length(unique(meta.l[[k]]$new.names))
+
+  #Remove any with only year (even if from Canada...)
+  rem<-c()
+  for (j in 1:nrow(meta.l[[k]])){
+    if(length(unlist(strsplit(meta.l[[k]]$date[j],"-")))==1) {rem<-c(rem,j)}
+  }
+  if(length(rem)>1){
+    meta.l[[k]]<-meta.l[[k]][-rem,]
+  }
+
+  #Remove any with date before 2019-12-01
+  too.old<-which(meta.l[[k]]$date<as.Date("2019-12-01"))
+  if(length(too.old)>1){
+    meta.l[[k]]<-meta.l[[k]][-too.old,]
+  }
+
+  #also these buggers, for ex> 2020-01-XX
+  if(any(str_detect(meta.l[[k]]$date,"-XX"))){
+    meta.l[[k]]$date<-str_replace_all(meta.l[[k]]$date,"-XX","")
+  }
+
+  #make year-month a new column
+  meta.l[[k]]$month<-as.character(NA)
+  for (i in 1:nrow(meta.l[[k]])){
+    if(length(unlist(strsplit(meta.l[[k]]$date[i],"-")))==2) {
+      meta.l[[k]]$month[i]<-format(as.Date(paste(meta.l[[k]]$date[i],"-01",sep="")), "%Y-%m");next
+      }
+    if(length(unlist(strsplit(meta.l[[k]]$date[i],"-")))==3) {meta.l[[k]]$month[i]<-format(as.Date(meta.l[[k]]$date[i]), "%Y-%m")}
+  }
+}
+
+## bind all the partitions together
+meta<-bind_rows(meta.l)
+
+## Add wuhan-hu-1 to metadata (not sure where it was excluded but not here)
+wh1.1<-read.table(wuhan.meta.in,sep = "\t", header = T)
+wh1.1$date<-wh1.1$Collection.date
+wh1.1$country<-"China"
+wh1.1$region<-"Asia"
+wh1.1$division<-"Hubei"
+wh1.1<-unite(wh1.1, "new.names",Accession.ID, date, sep="/",remove=F )
+wh1.meta<-meta[1,]
+wh1.meta[1,]<-NA
+for (i in 1:ncol(wh1.meta)){
+  match<-which(colnames(wh1.1) %in% colnames(wh1.meta)[i])
+  if(length(match==1)){ wh1.meta[1,i]<-wh1.1[1,match]}
+}
+wh1.meta$month<-"2019-12"
+wh1.meta$probability<-1
+
+#BIND wuhan to meta
+meta<-bind_rows(meta,wh1.meta)
+```
+
+## Separate Canadian metadata
+```{r}
+#subset the metadata
+meta.can<-meta[which(meta$country=="Canada"),]
+l.can<-nrow(meta.can) 
+
+#check locations are right
+# table(meta.can$division)
+# meta.can$division[which(meta.can$division=="Toronto")]<-"Ontario"
+
+# meta.can[which(is.na(meta.can$division)),] #UN-CRCHUM is in Montreal
+if(any(is.na(meta.can$division))){
+  meta.can$division[which(is.na(meta.can$division))]<-"Quebec"
+}
+
+#remove canada from meta for global subsample
+meta<-meta[meta$country!="Canada",]
+
+# Change to proper name
+if(any(meta.can$division=="Newfoundland")){
+  meta.can$division[which(meta.can$division=="Newfoundland")]<-"Newfoundland and Labrador"
+}
+
+```
+
+## Deal with incomplete dates in Canada
+```{r}
+#Read in previously inferred dates from the 20210211 builds (some of which were inferred in 0115...)
+meta.inf<-read.csv(meta.inferred.dates)
+
+#Identify incomplete dates in Canada with new column 'incomp'
+#If available in previously inferred dates, replace
+#Else, sample at random
+up.date<-c()
+meta.can$incomp<-0
+for (i in 1:nrow(meta.can)){
+  dt<-unlist(strsplit(meta.can$date[i],split="-"))
+  if(length(dt)==2){
+  #it is incomplete
+  meta.can$incomp[i]<-1
+  #look for a match in the prev'ly inferred
+  matchy<-which(meta.inf$GISAID_ID %in% meta.can$Accession.ID[i])
+  if(length(matchy)>0){
+    meta.can$date[i]<-meta.inf$date.lsd[matchy]
+    up.date<-c(up.date,i) #add to running vector of replacements
+    next #skip to next i
+  }
+  #Else, find days in month
+  dayz<-lubridate::days_in_month(paste(dt[1],dt[2],"01",sep="-")) %>% as.integer
+  #Then, sample a day and plop it in the date
+  day.samp<-formatC(sample(dayz,size=1), width = 2, format = "d", flag = "0") #make sure day has trailing zero
+  meta.can$date[i]<-paste(dt[1],dt[2],day.samp,sep="-") 
+  }
+}
+
+#how many prev inferred?
+length(up.date)
+
+#look at incompletes
+# table(meta.can$incomp)
+# 31526/nrow(meta.can) #11% cool...
+# table(meta.can$incomp, meta.can$division) #ontario contributed 31525 incomplete dates
+```
+
+## Add columns for the variant into the meta
+```{r}
+#group lineages within variants (grouped by gisaid)
+# sort(table(meta.can$Lineage))
+var.df<-data.frame("Variant"=names(table(meta.can$Variant)))
+
+#split the string by spaces
+var.df<-var.df %>% separate(Variant, sep=" ", as.character(1:10),remove=F)
+
+#quick change for last field
+var.df[nrow(var.df),5:9]<-var.df[nrow(var.df),4:8]
+var.df[nrow(var.df),4]<-var.df[nrow(var.df),3]
+var.df<-var.df %>% unite("origin","5":"10",sep=" ",na.rm = T)
+colnames(var.df)<-c("Variant","var.type","var.WHO","var.clade","var.lin","var.origin")
+var.df[1,c(2,3)]<-"Other"
+var.df$var.lin<-str_replace_all(var.df$var.lin,"\\(|\\)","")
+#add first global date from covlineages.org
+var.df$first.glob.date<-c("2019-12-24", "2020-09-01", "2020-09-01", "2021-03-01",
+                         "2020-09-22","2021-09-02", "2020-04-11","2020-03-25",
+                         "2020-01-28", "2020-03-03","2020-07-21","2020-12-15",
+                         "2021-01-08","2020-04-13","2021-01-01")
+
+### ORDER by greek
+# c("Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Iota", "Kappa", "Mu","Omicron")
+# See the _mod version of var.df for updated (as of 2023-05-11) first global sample dates
+
+## ORDER by Canada
+## ORDER by global
+
+#order by their first global date
+var.df<-var.df[with(var.df, order(as.Date(var.df$first.glob.date), decreasing = F)),]
+write.csv(var.df,var.df.out,row.names = F)
+#give each one a color
+vars.ch<-var.df$var.WHO
+varcolz<-colorRampPalette(c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928'))(nrow(var.df)) #https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
+names(vars.ch)<-varcolz
+
+#check
+vars.ch.df<-as.data.frame(vars.ch)
+ggplot(vars.ch.df)+
+  geom_text(aes(x=1:15, y=1:15,label=vars.ch, color=vars.ch))+
+  scale_color_manual(values=row.names(vars.ch.df))
+
+#write the color scheme for future use
+write.table(vars.ch.df,variant.colors.out,sep="\t",row.names=T)
+```
+
+##Join variant df onto meta
+```{r}
+#find rows with variant==na
+meta$Variant<-na.replace(meta$Variant,)
+meta.can$Variant<-na.replace(meta.can$Variant, "")
+
+#add the var.df to to meta and metacan
+meta<-left_join(meta, var.df, by="Variant")
+meta.can<-left_join(meta.can, var.df, by="Variant")
+
+#check if all have var.WHO 
+any(is.na(meta$var.WHO))
+any(is.na(meta.can$var.WHO))
+any(meta$var.WHO=="")
+any(meta.can$var.WHO=="")
+
+#remove unnecessary columns
+meta<-meta[,-which(colnames(meta) %in% c("X","X.1","probability"))]
+meta.can<-meta.can[,-which(colnames(meta.can) %in% c("X","X.1","probability"))]
+print(nrow(meta))
+print(nrow(meta.can))
+
+#weirdo:
+bady<-which(meta.can$date=="2021")
+if(length(bady)>0){
+  meta.can<-meta.can[-bady,]
+}
+```
+
+# Write the merged and cleaned data
+```{r}
+#fully compiled and cleaned meta + metacan
+write.csv(meta,meta.glob.out,row.names = F)
+write.csv(meta.can,meta.can.out,row.names=F)
+```
+
+# Make colors and lookups for global regions, Canadian provinces
+```{r}
+## Make a lookup table of locations, grouped if sparser sequences
+#build lookup table
+allcountries<-unique(meta.glob$country) 
+length(allcountries)#210
+lookup.geo<-data.frame(og.loc=allcountries,
+                       new.loc=NA)
+
+#identify all 'big.origins' countries that contributed more than the 95th percentile of seqs
+# summary(as.vector(table(meta.glob$country)))
+seq.count<-table(meta.glob$country)
+# summary(as.vector(seq.count))
+#median 721.0 ; mean 39577.3 
+perc90<-quantile(as.vector(seq.count),probs = 0.9)
+perc95<-quantile(as.vector(seq.count),probs = 0.95)
+#use 95th percentile
+big.origins<-c(names(seq.count[which(seq.count>perc95)]))
+
+#add on south africa due to importance in beta and omicron
+big.origins<-c(big.origins,"South Africa")
+# length(big.origins) #12
+
+#go through all countries, if a big.origin, keep the name. otherwise use region/continent as lookup geo
+for (i in 1:nrow(lookup.geo)){
+  ifelse (lookup.geo$og.loc[i] %in% big.origins,
+          lookup.geo$new.loc[i]<-lookup.geo$og.loc[i],
+          lookup.geo$new.loc[i]<-meta.glob$region[which(meta.glob$country==lookup.geo$og.loc[i])[1]]
+  )
+}
+# head(lookup.geo)
+
+#add provinces to lookup.geo and keep original, no maritimes merging
+allprovs<-unique(meta.can$division) 
+lookup.prov<-data.frame(og.loc=allprovs,
+                        new.loc=allprovs)
+#merge the dfs
+lookup.geo.final<-lookup.geo %>% bind_rows(lookup.prov)
+
+#write the lookuptable for future use
+write.csv(lookup.geo.final,lookup.geo.out,row.names=F)
+
+##### LOCATION COLOR SCHEMES ######
+
+#first pick out divergent color scheme for provinces
+provcols<-c("#486090","plum4","brown4","brown3","darkorange1","darkorange3",
+            "darkgoldenrod1","darkgoldenrod2","darkgoldenrod3","darkgoldenrod4", 
+             "bisque1","bisque2","bisque4")
+provs<-c("Quebec","British Columbia","Ontario","Alberta","Manitoba","Saskatchewan",
+         "New Brunswick","Newfoundland and Labrador","Nova Scotia","Prince Edward Island",
+         "Yukon","Northwest Territories","Nunavut")
+names(provcols)<-as.character(provs)
+colortest(provcols)
+
+#assign continents and their big.origins countries grouped color schemes
+#https://colorbrewer2.org/#type=sequential&scheme=YlGn&n=9
+asia.cols<-c("#005a32","#41ab5d","#addd8e") #greens, dark to light
+names(asia.cols)<-c("Asia","India","Japan")
+colortest(asia.cols)
+
+#https://colorbrewer2.org/#type=sequential&scheme=YlGnBu&n=9
+eur.cols<-rev(c('#edf8b1','#c7e9b4','#7fcdbb','#41b6c4','#1d91c0','#225ea8','#253494','#081d58'))
+names(eur.cols)<-c("Europe","France","United Kingdom","Germany","Spain","Sweden","Switzerland","Denmark")
+colortest(eur.cols)
+
+#https://colorbrewer2.org/#type=sequential&scheme=Purples&n=7
+amer.cols<-rev(c('#9e9ac8','#807dba','#6a51a3','#4a1486'))
+names(amer.cols)<-c("North America","USA","South America","Brazil")
+colortest(amer.cols)
+
+#single color to represent canada DARK RED
+can.cols<-"#8b0000"
+names(can.cols)<-"Canada"
+
+#https://colorbrewer2.org/#type=sequential&scheme=RdPu&n=7
+afr.cols<-rev(c("#f768a1","#ae017e")) #pink
+names(afr.cols)<-c("Africa","South Africa")
+colortest(afr.cols)
+
+oce.cols<-c("#fa9fb5") #light pink
+names(oce.cols)<-"Oceania"
+colortest(oce.cols)
+
+#Add all together
+globalPalette<-c(provcols,can.cols,eur.cols,amer.cols,asia.cols,afr.cols,oce.cols)
+# nm<-names(globalPalette)
+# globalPalette<-as.data.frame(globalPalette)
+# rownames(globalPalette)<-nm
+
+#example plot
+colortest(globalPalette)
+
+#export a tsv of name and hex color for others to use
+write.table(as.data.frame(globalPalette),global.colors.out,sep="\t",
+            row.names = T)
+
+```
+

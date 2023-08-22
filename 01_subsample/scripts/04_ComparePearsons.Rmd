@@ -1,0 +1,288 @@
+---
+title: "corr coef"
+author: "Angela"
+date: '2022-10-19'
+output: html_document
+---
+
+## Objectives
+* compare the correlation coefficients between cases and sequences for linear and log, for Canada and global, for the following:
+  * pre-subsampling
+  * post-subsampling, temporal distrib
+  * post-subsampling, uniform distrib
+  
+```{r}
+library(ggplot2)
+library(tidyverse)
+```
+
+```{r}
+pubTheme<-theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background=element_rect("grey95"), axis.line = element_line(colour = "black"),
+            legend.key.size = unit(0.5,"line"),
+            text=element_text(size=10,face="bold"),
+            legend.text=element_text(size=6))
+
+f.out<-"compare_subsamps_2023/"
+if(!dir.exists(f.out)) {dir.create(f.out)}
+```
+  
+  
+```{r}
+# pre-subsampling
+pre.can.lin<-read.csv("Results_PreSubsamp_omi_2023/corr.case.vs.seq.Canada.pre-samp.csv")
+pre.can.log<-read.csv("Results_PreSubsamp_omi_2023/corr.case.vs.seq.Canada.pre-samp.log10.csv")
+pre.glob.lin<-read.csv("Results_PreSubsamp_omi_2023/corr.case.vs.seq.global.pre-samp.csv")
+pre.glob.log<-read.csv("Results_PreSubsamp_omi_2023/corr.case.vs.seq.global.pre-samp.log10.csv")
+
+#post-subsampling, temporal distrib 1 (sampling probabilities based on raw instead of rolling avg estimated counts)
+temp1.can.lin<-read.csv("Results_PostSubsamp_202208_2023/corr.case.vs.seq.Canada.post-samp.csv")
+temp1.can.log<-read.csv("Results_PostSubsamp_202208_2023/corr.case.vs.seq.Canada.post-samp.log10.csv")
+temp1.glob.lin<-read.csv("Results_PostSubsamp_202208_2023/corr.case.vs.seq.global.post-samp.csv")
+temp1.glob.log<-read.csv("Results_PostSubsamp_202208_2023/corr.case.vs.seq.global.post-samp.log10.csv")
+
+# #post-subsampling, temporal distrib 2 - first bootstrap (sampling probabilities based on rolling avg estimated counts)
+# temp2.1.can.lin<-read.csv("Results_PostSubsamp_202210/corr.case.vs.seq.Canada.post-samp.csv")
+# temp2.1.can.log<-read.csv("Results_PostSubsamp_202210/corr.case.vs.seq.Canada.post-samp.log10.csv")
+# temp2.1.glob.lin<-read.csv("Results_PostSubsamp_202210/corr.case.vs.seq.global.post-samp.csv")
+# temp2.1.glob.log<-read.csv("Results_PostSubsamp_202210/corr.case.vs.seq.global.post-samp.log10.csv")
+
+#post-subsampling, temporal distrib 2 - second bootstrap (sampling probabilities based on rolling avg estimated counts)
+# temp2.2.can.lin<-read.csv("Results_PostSubsamp_202210_2/corr.case.vs.seq.Canada.post-samp.csv")
+# temp2.2.can.log<-read.csv("Results_PostSubsamp_202210_2/corr.case.vs.seq.Canada.post-samp.log10.csv")
+# temp2.2.glob.lin<-read.csv("Results_PostSubsamp_202210_2/corr.case.vs.seq.global.post-samp.csv")
+# temp2.2.glob.log<-read.csv("Results_PostSubsamp_202210_2/corr.case.vs.seq.global.post-samp.log10.csv")
+
+# post-subsampling, uniform distrib
+unif.can.lin<-read.csv("Results_PostSubsamp_unif_2023/corr.case.vs.seq.Canada.post-samp.csv")
+unif.can.log<-read.csv("Results_PostSubsamp_unif_2023/corr.case.vs.seq.Canada.post-samp.log10.csv")
+unif.glob.lin<-read.csv("Results_PostSubsamp_unif_2023/corr.case.vs.seq.global.post-samp.csv")
+unif.glob.log<-read.csv("Results_PostSubsamp_unif_2023/corr.case.vs.seq.global.post-samp.log10.csv")
+
+# post-subsampling, uniform distrib
+# unif.can.lin<-read.csv("Results_PostSubsamp_unif/corr.case.vs.seq.Canada.post-samp.csv")
+# unif.can.log<-read.csv("Results_PostSubsamp_unif/corr.case.vs.seq.Canada.post-samp.log10.csv")
+# unif.glob.lin<-read.csv("Results_PostSubsamp_unif/corr.case.vs.seq.global.post-samp.csv")
+# unif.glob.log<-read.csv("Results_PostSubsamp_unif/corr.case.vs.seq.global.post-samp.log10.csv")
+```
+
+## add descriptor columns to each
+```{r}
+add.strat<-function(df,strat,type,geo){
+  #add descriptor cols
+  df$strategy<-strat
+  df$type<-type
+  df$geo<-geo
+  return(df)
+}
+
+pre.can.lin<-add.strat(pre.can.lin,"pre-samp","linear","canada")
+pre.can.log<-add.strat(pre.can.log,"pre-samp","log","canada")
+pre.glob.lin<-add.strat(pre.glob.lin,"pre-samp","linear","global")
+pre.glob.log<-add.strat(pre.glob.log,"pre-samp","log","global")
+
+#post-subsampling, temporal distribs
+temp1.can.lin<-add.strat(temp1.can.lin,"temp1","linear","canada")
+temp1.can.log<-add.strat(temp1.can.log,"temp1","log","canada")
+temp1.glob.lin<-add.strat(temp1.glob.lin,"temp1","linear","global")
+temp1.glob.log<-add.strat(temp1.glob.log,"temp1","log","global")
+
+# temp2.1.can.lin<-add.strat(temp2.1.can.lin,"temp2","linear","canada")
+# temp2.1.can.log<-add.strat(temp2.1.can.log,"temp2","log","canada")
+# temp2.1.glob.lin<-add.strat(temp2.1.glob.lin,"temp2","linear","global")
+# temp2.1.glob.log<-add.strat(temp2.1.glob.log,"temp2","log","global")
+# 
+# temp2.2.can.lin<-add.strat(temp2.2.can.lin,"temp2.2","linear","canada")
+# temp2.2.can.log<-add.strat(temp2.2.can.log,"temp2.2","log","canada")
+# temp2.2.glob.lin<-add.strat(temp2.2.glob.lin,"temp2.2","linear","global")
+# temp2.2.glob.log<-add.strat(temp2.2.glob.log,"temp2.2","log","global")
+
+# post-subsampling, uniform distrib
+unif.can.lin<-add.strat(unif.can.lin,"uniform","linear","canada")
+unif.can.log<-add.strat(unif.can.log,"uniform","log","canada")
+unif.glob.lin<-add.strat(unif.glob.lin,"uniform","linear","global")
+unif.glob.log<-add.strat(unif.glob.lin,"uniform","log","global")
+```
+
+#join them all together
+```{r}
+all.lin<-bind_rows(pre.can.lin, pre.glob.lin, temp1.can.lin, temp1.glob.log,
+                   #temp2.1.can.lin, temp2.1.glob.lin, temp2.2.can.lin, temp2.2.glob.lin,
+                   unif.can.lin, unif.glob.lin)
+all.log<-bind_rows(pre.can.log, pre.glob.log, temp1.can.log, temp1.glob.log,
+                   #temp2.1.can.log, temp2.1.glob.log, temp2.2.can.log, temp2.2.glob.log,
+                   unif.can.log, unif.glob.log)
+
+#order the lineages 
+var.ord<-c("Other","Alpha","Zeta","Gamma", "Epsilon","Eta","Beta","Delta",
+           "Kappa","Iota","Mu","BA.1","BA.1.1","BA.2")
+all.lin$var.WHO<-factor(all.lin$var.WHO,levels=var.ord)
+all.log$var.WHO<-factor(all.log$var.WHO,levels=var.ord)
+
+#order the strats
+strat.ord<-c("pre-samp","uniform","temp1")#,"temp2.1","temp2.2")
+all.lin$strategy<-factor(all.lin$strategy,levels=strat.ord)
+all.log$strategy<-factor(all.log$strategy,levels=strat.ord)
+```
+
+#Plot the pearson and spearman correlation coeffs for linear case to seq
+```{r}
+#compare the two boots
+all.lin %>%
+  # filter(strategy %in% c("temp2.1","temp2.2")) %>%
+  ggplot()+
+  geom_point(aes(x=geo, y=pearson, color=strategy),alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  labs(x=NULL)+
+  pubTheme
+ggsave(paste0(f.out,"temporal2_2boots_linear_pearson.png"),width=6,height=3,units="in")
+#almost identical, except for other
+
+all.lin %>%
+  filter(strategy %in% c("temp2.1","temp2.2")) %>%
+  ggplot()+
+  geom_point(aes(x=geo, y=spearman, color=strategy),alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  labs(x=NULL)+
+  pubTheme
+ggsave(paste0(f.out,"temporal2_2boots_linear_spearman.png"),width=6,height=3,units="in")
+
+#interesting, they vary more for the spearman rank correlation... would expect this to be more consistent? maybe to do with excluding zeroes?
+#should go back and repeat this export ONLY for all boots of the desired strategy
+
+#compare strats, remove one boot for now
+all.lin.mod<-all.lin
+library(stringi)
+all.lin.mod$strategy<- stri_replace_all_regex(all.lin.mod$strategy,
+                                  pattern=c('pre-samp', 'temp1', 'temp2.1',"temp2.2","uniform"),
+                                  replacement=c('Pre-subsample', 'Temporal-sampling', 'Temporal2.1',"Temporal2.2","Uniform-sampling"),
+                                  vectorize=FALSE)
+
+all.lin.mod %>%
+  filter(!strategy %in% c('Temporal2.1',"Temporal2.2")) %>%
+  ggplot()+
+  pubTheme+
+  geom_jitter(aes(x=geo, y=pearson, color=strategy),stat="identity",width=0.05,alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        legend.position = "top")+
+  labs(x=NULL, y="Pearson r: monthly cases vs. sequences")+
+  guides(color=guide_legend(title="Sample", title.position = "left"))+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"fullcomp_linear_pearson.png"),width=6,height=3,units="in")
+
+#compare strats, remove one boot for now
+all.lin.mod %>% 
+  filter(!strategy %in% c('Temporal2.1',"Temporal2.2")) %>%
+  ggplot()+
+  geom_jitter(aes(x=geo, y=spearman, color=strategy),stat="identity",width=0.05,alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  labs(x=NULL, y="Spearman rank corr. coeff. cases vs sequences")+
+  pubTheme+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"fullcomp_linear_spearman.png"),width=6,height=3.5,units="in")
+
+#compare R2
+all.lin.mod %>% 
+  filter(!strategy %in% c('Temporal2.1',"Temporal2.2")) %>%
+  ggplot()+
+  geom_jitter(aes(x=geo, y=adj.r2, color=strategy),stat="identity",width=0.05,alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  labs(x=NULL, y="Adjusted R^2, linear fit cases v seqs")+
+  pubTheme+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"fullcomp_linear_R2.png"),width=6,height=3.5,units="in")
+
+```
+
+
+#Plot the pearson and spearman correlation coeffs for linear case to seq
+```{r}
+#compare the two boots
+all.log %>%
+  filter(strategy %in% c("temp2.1","temp2.2")) %>%
+  ggplot()+
+  geom_point(aes(x=geo, y=pearson, color=strategy),alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        legend.position = "top")+
+  labs(x=NULL, y="Pearson r: monthly cases vs. sequences")+
+  guides(color=guide_legend(title="Sample", title.position = "left"))+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"temporal2_2boots_log_pearson.png"),width=6,height=3,units="in")
+
+all.log %>%
+  filter(strategy %in% c("temp2.1","temp2.2")) %>%
+  ggplot()+
+  geom_point(aes(x=geo, y=spearman, color=strategy),alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="fixed")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        legend.position = "top")+
+  labs(x=NULL, y="Spearman r: monthly cases vs. sequences")+
+  guides(color=guide_legend(title="Sample", title.position = "left"))+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"temporal2_2boots_log_spearman.png"),width=6,height=3,units="in")
+
+#should go back and repeat this export ONLY for all boots of the desired strategy
+
+#compare strats, remove one boot for now
+all.log.mod<-all.log
+all.log.mod$strategy<- stri_replace_all_regex(all.log.mod$strategy,
+                                  pattern=c('pre-samp', 'temp1', 'temp2.1',"temp2.2","unif"),
+                                  replacement=c('Pre-subsample', 'Temporal-sampling', 'Temporal2.1',"Temporal2.2","Uniform-sampling"),
+                                  vectorize=FALSE)
+
+
+all.log.mod %>%
+  filter(!strategy %in% c('Temporal2.1',"Temporal2.2")) %>%
+  ggplot()+
+  geom_jitter(aes(x=geo, y=pearson, color=strategy),stat="identity",width=0.05,alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+                legend.position = "top")+
+  pubTheme+
+  labs(x=NULL, y="Pearson r: log monthly cases vs. sequences")+
+  guides(color=guide_legend(title="Sample", title.position = "left"))+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"fullcomp_log_pearson.png"),width=6,height=3,units="in")
+
+#compare strats, remove one boot for now
+all.log.mod %>%
+  filter(!strategy %in% c('Temporal2.1',"Temporal2.2")) %>%
+  ggplot()+
+  geom_jitter(aes(x=geo, y=spearman, color=strategy),stat="identity",width=0.05,alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+                legend.position = "top")+
+  pubTheme+
+  labs(x=NULL, y="Spearman r: log monthly cases vs. sequences")+
+  guides(color=guide_legend(title="Sample", title.position = "left"))+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"fullcomp_log_spearman.png"),width=6,height=3,units="in")
+
+all.log.mod %>%
+  filter(!strategy %in% c('Temporal2.1',"Temporal2.2")) %>%
+  ggplot()+
+  geom_jitter(aes(x=geo, y=adj.r2, color=strategy),stat="identity",width=0.05,alpha=0.9)+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+                legend.position = "top")+
+  pubTheme+
+  labs(x=NULL, y="Adjusted R^2: linear fit log cases vs. seqs")+
+  guides(color=guide_legend(title="Sample", title.position = "left"))+
+  scale_y_continuous(expand=expansion(0.05,0.05))
+ggsave(paste0(f.out,"fullcomp_log_r2.png"),width=6,height=3,units="in")
+
+```
+
+
+# Calculate and plot the difference in coefficients (pre to post)
+```{r}
+## what about looking at diffs 
+```
+
+  

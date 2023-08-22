@@ -1,0 +1,546 @@
+---
+title: "Untitled"
+author: "Angela"
+date: '2023-06-26'
+output: html_document
+---
+
+
+# Setup
+
+## libraries
+```{r setup, include=FALSE}
+library(knitr)
+library(tidyverse)
+library(stringr)
+library(coronavirus)
+library(ggplot2)
+library(RColorBrewer)
+library(zoo)
+library(ggstance)
+library(cowplot)
+library(lubridate)
+library(MASS)
+library(ggrepel)
+library(gtools)
+library(data.table)
+library(ggplotify)
+library(gridExtra)
+library(grid)
+library(lattice)
+library(reshape2)
+library(gdata) 
+```
+
+## inputs and outputs
+```{r}
+# the day of most recent sample
+data.date<-"2022-03-22" 
+start.date<-"2020-11-01" #about when VOCs first started coming to Canada
+
+# set up months for dataframes below for 2021 and 2022
+last.mon<-format(as.Date(data.date), "%m")
+last.mon.l<-24+as.numeric(last.mon) #starts at 0, so actually leads to 13+..
+mons <- format(ymd(as.Date("2019-12-01")) %m+% months(0:last.mon.l),"%Y-%m")
+l.mons<-length(mons)
+
+#pre-subsampled clean data for global and canada
+meta.in.glob<-"CleanMeta_PreSubsamp/global_meta.csv"
+meta.in.can<-"CleanMeta_PreSubsamp/canada_meta.csv" 
+
+## Geo lookup table and colors from previous build
+lookup.geo.in<-"colors_out/lookup.geo.csv"
+geo.colors.in<-"colors_out/global.colors.tsv"
+
+#continents
+continents.in<-"../../20220322_phylogeo/01_subSample/CleanMeta_PreSubsamp/countries.csv"
+
+#variant colors
+variant.colors.in<-"CleanMeta_PreSubsamp/variant_colors.tsv"
+variant.df.in<-"CleanMeta_PreSubsamp/variant.df.csv" #couple manual updates 2023-05-11 based on outbreak.info
+
+
+f.in<-"Results_PreSubsamp_omi_2023"
+
+#kept omicron the same even though it is 11 b/c plausilbe that can seqs before detected 
+
+#PHAC cases over time by prov
+can.cases.in<-"Canada_cases/20220516_covid19_casesbyprov.csv"
+
+#folder out
+f.out<-"Figure1_plot_20230731"
+if(!dir.exists(f.out)){dir.create(f.out)}
+
+## Setup themes for plots
+pubTheme<-theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background=element_rect("grey95"),
+            axis.line = element_line(colour = "black"),
+            legend.key.size = unit(0.5,"line"),
+            text=element_text(size=10,face="bold"),
+            legend.text=element_text(size=8))
+
+pubThemeDate<-theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                    panel.background = element_rect("grey95"), 
+                    axis.line = element_line(colour = "black"),
+                    text=element_text(size=10,face="bold"),
+                    legend.text=element_text(size=8),
+                    axis.text.x=element_text(angle = 45,hjust=1,size=rel(1))) #this is the only difference b/w them
+
+scaleDate<-scale_x_date(date_breaks = "1 month", date_minor_breaks = "2 weeks", date_labels = "%b %Y",limits=as.Date(c(start.date,"2022-03-22")),expand=c(0,0))
+
+xdates<-ymd(c("2020-12-01","2021-03-01","2021-06-01","2021-09-01","2021-12-01","2022-03-01"))
+scaleDateBusy<-scale_x_date(breaks=xdates, date_labels = "%b %Y",
+                            limits=as.Date(c(start.date,"2022-03-22")),
+                            expand=c(0,0))
+
+scaleDateFlex<-scale_x_date(date_labels = "%b %Y",expand=c(0,0))
+
+scaleMonthChar<-scale_x_discrete(breaks=c("2020-12","2021-03","2021-06","2021-09","2021-12","2022-03"),labels=c("Dec 2020","Mar 2021","Jun 2021","Sep 2021","Dec 2021","Mar 2022"))
+
+```
+
+## Make a color scheme for all countries with seqs
+```{r}
+#Use new color scheme with fewer groupings
+lookup.geo<-read.csv(lookup.geo.in,header=T) #use later on
+
+#import a tsv of name and hex color for LOCATIONS
+globalPalette<-read.table(geo.colors.in,sep="\t")
+
+## make color scheme
+glob.colz<-row.names(globalPalette)
+globalPalette.ch<-as.character(globalPalette$globalPalette)
+names(globalPalette.ch)<-glob.colz
+
+GlobColScale<-scale_colour_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+GlobFillScale<-scale_fill_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+
+
+CountryColScale<-scale_colour_manual(name = "Global region",
+                                     values = globalPalette.ch[15:length( globalPalette.ch)],
+                                     na.value="grey60")
+CountryFillScale<-scale_fill_manual(name = "Global region",
+                                    values = globalPalette.ch[15:length( globalPalette.ch)]
+                                    ,na.value="grey60")
+```
+
+## VOC color scheme
+Note this is read in from the 00_MergePartitionsSplitCanada script
+```{r}
+varPalette<-read.table(variant.colors.in,sep="\t")
+
+## make color scheme
+var.colz<-as.character(varPalette$vars.ch)
+varPalette.ch<-row.names(varPalette)
+names(varPalette.ch)<-var.colz
+
+# var.colz<-row.names(varPalette)
+# varPalette.ch<-as.character(varPalette$vars.ch)
+# names(varPalette.ch)<-var.colz
+
+VOCColScale<-scale_colour_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+VOCFillScale<-scale_fill_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+
+### FOR SEPEARATE OMI###
+### add separate groups for each omicron group
+omis<-c("BA.1","BA.1.1","BA.2", "BA.3")
+# https://www.colorhexa.com/ec9a91
+omiPalette.ch<-c("#e47266","#e8867b","#f0aea7","#f4c2bc") 
+names(omiPalette.ch)<-omis
+morevarPal<-c(varPalette.ch,omiPalette.ch)
+morevarPal<-morevarPal[-which(names(morevarPal)=="Omicron")]
+
+VarColScale<-scale_colour_manual(name = "Variant",values = morevarPal,na.value=NULL)
+VarFillScale<-scale_fill_manual(name = "Variant",values = morevarPal,na.value=NULL)
+
+## read in the variant df to later remove metacan seqs with dates that are too early
+# var.df<-read.csv(variant.df.in)
+# 
+# #add to var.df
+# var.omi<-var.df[which(var.df$var.WHO=="Omicron"),]
+# var.omi<-rbind(var.omi,var.omi,var.omi,var.omi) #one for each sep lineage considered
+# var.omi$var.WHO<-omis
+# var.omi$var.lin<-omis
+# var.omi$first.glob.date<-c("2021-09-02","2021-09-09","2021-09-21","2021-11-23")
+# # var.omi$first.can.date<-c("2021-11-04","2021-11-04","2021-11-29")
+# 
+# #join var.omi onto var.df 
+# var.df<-rbind(var.df,var.omi)
+# 
+# #remove 'omicron' full group
+# var.df<-var.df[-which(var.df$var.WHO=="Omicron"),]
+# 
+
+var.df<-read.csv(paste0(f.in,"/variant.df.can.csv"))
+```
+
+
+
+## Read in variant cases
+```{r}
+meta.can.var.daily.full3<-read.csv(paste0(f.in,"/meta.can.var.daily.full3.csv"))
+
+```
+
+##Make a version of the variant cases in Canada with BA.* separate
+```{r}
+
+#order the variants   
+var.df<-var.df[with(var.df, order(var.df$first.can.date, decreasing = F)),]
+var.df<-var.df[c(1:14,16,15,17),] #make ba.1 come before ba.1.1
+var.ord<-var.df$var.WHO
+var.ord.red<-var.ord[-which(var.ord %in% c("Theta","Lambda","GH/490R","BA.3"))]
+var.ord.red2<-var.ord.red
+#merge BA.1 iwth BA.1.1:
+# var.ord.red2<-var.ord.red[-which(var.ord.red %in% c("BA.1.1"))]
+# var.ord.red2<-var.ord.red[-which(var.ord.red %in% c( "BA.1","BA.1.1" ,"BA.2"))]
+# var.ord.red2<-var.ord.red2 %>% c("Omicron")
+
+morevarPal2<-morevarPal
+# morevarPal2<-morevarPal2[-which(names(morevarPal2) %in% c( "BA.1.1"))]
+# names(morevarPal2)[which(names(morevarPal2)=="BA.1.1")]<-"Omicron"
+
+VarFillScaleRed2<-scale_fill_manual(name = "Variant",values = morevarPal2[match(var.ord.red2,names(morevarPal2))],na.value="grey60")
+VarColScaleRed2<-scale_color_manual(name = "Variant",values = morevarPal2[match(var.ord.red2,names(morevarPal2))],na.value="grey60")
+
+
+meta.can.var.daily.full3.2<-meta.can.var.daily.full3
+# meta.can.var.daily.full3.2$var.WHO<-str_replace_all(meta.can.var.daily.full3.2$var.WHO, c("BA.1.1"="BA.1"))
+# meta.can.var.daily.full3.2$var.WHO<-str_replace_all(meta.can.var.daily.full3.2$var.WHO,"Omicron.1","Omicron")
+meta.can.var.daily.full3.2$var.WHO<-factor(meta.can.var.daily.full3.2$var.WHO,
+                                           levels=var.ord.red2)
+meta.can.var.daily.full3.2$date<-as.Date(meta.can.var.daily.full3.2$date)
+
+#Plot the avgVOC_cases by var.WHO for all of Canada
+plot.daily.ave.voc.cases.f1<-meta.can.var.daily.full3.2%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.3,0.6),
+        legend.text=element_text(size=rel(0.9)),
+        legend.title = element_text(size=rel(1.1)),
+        plot.margin=margin(1,1,1,10,unit="pt"),
+        axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Daily variant cases in Canada")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed2+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 1,keyheight = 1, 
+                           title="Variant",ncol=2))
+  
+plot.daily.ave.voc.cases.f1
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_Canada_FIG1A.png",sep=""), height=3,width=5,units="in")
+
+#make a version with waves labelled
+lb2 <- paste("2^nd","~wave")
+lb3 <- paste("3^rd","~wave")
+lb4 <- paste("4^th","~wave")
+lb5 <- paste("5^th","~wave")
+
+plot.daily.ave.voc.cases.fplus<-plot.daily.ave.voc.cases.f1+
+  annotate(geom="text",label=lb2,parse=TRUE,fontface="italic", 
+           x=as.Date("2021-01-05"), y=8400, hjust=1,size=2.5)+
+  annotate(geom="text",label=lb3,parse=TRUE,fontface="italic", 
+           x=as.Date("2021-04-09"), y=8400, hjust=1,size=2.5)+
+  annotate(geom="text",label=lb4,parse=TRUE,fontface="italic", 
+           x=as.Date("2021-09-15"), y=5050, hjust=1,size=2.5)+
+  annotate(geom="text",label=lb5,parse=TRUE,fontface="italic", 
+           x=as.Date("2021-12-28"), y=40000, hjust=1,size=2.5)
+plot.daily.ave.voc.cases.fplus
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_Canada_FIG1A_waves.png",sep=""), height=3,width=5,units="in")
+
+```
+
+```{r}
+interv<-read.csv("../04_canadaTimeline/2023-02-17_Results/can.variant.interv.plotty2.csv")
+interv$Start.date<-as.Date(interv$Start.date)
+interv$End.date<-as.Date(interv$End.date)
+#Make more concise
+interv$Description[interv$variant=="Delta"]<-"India flight ban"
+interv$Description[interv$variant=="Alpha"]<-"UK flight ban"
+interv$Description[interv$variant=="Beta"]<-"Enhanced screening South Africa"
+interv$Description[interv$variant=="Gamma"]<-"Enhanced screening Brazil"
+interv$Description[interv$variant=="Omicron"]<-"Southern Africa entry ban"
+
+can.var2<-interv
+#make y positions (same for two gamma interventions)
+can.var2$position<-c(1,2,3,3,4,5)
+#bigger gaps for larger scale
+can.var2$position2<-can.var2$position*150
+can.var2$hjusts<-c(0,0,0,0,0,0.85)
+# can.var2$position<-1:nrow(can.var2)
+
+#remove redundant text for two gamma interves
+can.var2$Description[4]<-NA
+can.var2$variant2<-can.var2$variant #duplicate
+can.var2$variant2[4]<-NA
+can.var2$var.WHO<-can.var2$variant
+
+#replace the color name
+can.var2$var.WHO<-str_replace_all(can.var2$var.WHO, "Omicron","BA.1")
+
+# can.var2$variant[3]<-NA #need this text 
+# head(can.var)
+# p2<-can.var2 %>%
+#   ggplot()+
+#   labs(x=NULL,y=NULL)+
+#   #description and lines to axis
+#   geom_segment(aes(y=position,yend=position, 
+#                               x=Start.date,xend=End.date,color=variant),
+#                size=3,alpha=1)+
+#   geom_text(aes(x=Start.date,label=Description,y=position+0.25), fontface="bold", size=3,hjust=0)+
+#   # geom_text(aes(x=Start.date-1,label=variant2,y=position), fontface="bold", size=4.5,hjust=1)+ 
+#   pubThemeDate+
+#   theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+#         axis.text.y=element_blank(),
+#         legend.position="none",
+#         axis.ticks.y=element_blank(),
+#         )+
+#   # scaleDateBusy+
+#   scale_x_date(breaks=xdates, date_labels = "%b %Y",
+#                             limits=c(as.Date(start.date)+11, as.Date(data.date)),
+#                              # expand=expansion(add=c(14,14)))+
+#   expand=expansion(add=c(5,150)))+
+#   coord_cartesian(ylim=c(0.1,nrow(can.var2)))+
+#   # scale_color_manual(values=respcolz)+
+#   scale_y_continuous(expand = expansion(add=c(0, 0)))+
+#   VOCColScale
+# p2
+# ggsave(paste0(f.out,"Canada-variant-intervention-timeline.png"),height=1.7,width=8,units="in")
+
+```
+
+## Plot of total importations over time for each variant
+```{r}
+#import for each variant where this object was already created
+alpha<-read.csv("../03_ancestral/2023-06-26_alpha_analysis/alldailyintros.csv")
+alpha$var.WHO<-"Alpha"
+
+beta<-read.csv("../03_ancestral/2023-06-26_beta_analysis/alldailyintros.csv")
+beta$var.WHO<-"Beta"
+
+gamma<-read.csv("../03_ancestral/2023-06-26_gamma_analysis/alldailyintros.csv")
+gamma$var.WHO<-"Gamma"
+
+delta<-read.csv("../03_ancestral/2023-07-06_delta_analysis/alldailyintros.csv")
+delta$var.WHO<-"Delta"
+#something wrong here with the singletons.. work around for now
+# delta<-delta %>% filter(type == "sublineage")
+# #read in an older version of singleton summary, should be the same
+# delta.sing<-read.csv("../03_ancestral/2023-02-10_delta_analysis/sing.par.roll.summary.csv")
+# totalsingle<-delta.sing %>% 
+#   dplyr::group_by(tmrca.dt.half) %>%
+#   dplyr::summarize(total.intros=sum(intros_meansum7d.mean, na.rm=T)) %>% as.data.frame()
+# totalsingle$type<-"singleton"
+# colnames(totalsingle)[1]<-"tmrca.dt"
+# totalsingle$var.WHO<-"Delta"
+# delta2<-bind_rows(totalsingle, delta)
+
+## Add VOIs
+#zeta
+zeta<-read.csv("../03_ancestral/2023-07-10_zeta_analysis/alldailyintros.csv")
+zeta$var.WHO<-"Zeta"
+
+#gamma
+gamma<-read.csv("../03_ancestral/2023-07-06_gamma_analysis/alldailyintros.csv")
+gamma$var.WHO<-"Gamma"
+
+#epsilon
+epsilon<-read.csv("../03_ancestral/2023-07-10_epsilon_analysis/alldailyintros.csv")
+epsilon$var.WHO<-"Epsilon"
+
+#eta
+eta<-read.csv("../03_ancestral/2023-07-10_eta_analysis/alldailyintros.csv")
+eta$var.WHO<-"Eta"
+
+#kappa
+kappa<-read.csv("../03_ancestral/2023-07-10_kappa_analysis/alldailyintros.csv")
+kappa$var.WHO<-"Kappa"
+
+#iota
+iota<-read.csv("../03_ancestral/2023-07-10_iota_analysis/alldailyintros.csv")
+iota$var.WHO<-"Iota"
+
+#mu
+mu<-read.csv("../03_ancestral/2023-07-10_mu_analysis/alldailyintros.csv")
+mu$var.WHO<-"Mu"
+
+
+#Omicron 
+ba1<-read.csv("../03_ancestral/2023-07-05_ba1_analysis/alldailyintros.csv")
+ba1$var.WHO<-"BA.1"
+ba11<-read.csv("../03_ancestral/2023-07-05_ba11_analysis/alldailyintros.csv")
+ba11$var.WHO<-"BA.1.1"
+
+ba2<-read.csv("../03_ancestral/2023-07-06_ba2_analysis/alldailyintros.csv")
+ba2$var.WHO<-"BA.2"
+
+
+# ba1.sing<-read.csv("../03_ancestral/2023-02-13_BA1_analysis/sing.par.roll.summary.csv")
+# ba1.sub<-read.csv("../03_ancestral/2023-02-13_BA1_analysis/sum.par.roll.summary.csv")
+# 
+# ba11.sing<-read.csv("../03_ancestral/2023-02-13_BA11_analysis/sing.par.roll.summary.csv")
+# ba11.sub<-read.csv("../03_ancestral/2023-02-13_BA11_analysis/sum.par.roll.summary.csv")
+# 
+# ba2.sing<-read.csv("../03_ancestral/2023-02-13_BA2_analysis/sing.par.roll.summary.csv")
+# ba2.sub<-read.csv("../03_ancestral/2023-02-13_BA2_analysis/sum.par.roll.summary.csv")
+
+#BA.1 and BA.1.1 together:
+# BA1.sing<-bind_rows(ba1.sing,ba11.sing)
+# BA1.sub<-bind_rows(ba1.sub,ba11.sub)
+
+# function for singletons
+# summ.singlez<-function(df, name){
+#     #summarize singles
+#   summ.single<-df%>% 
+#     dplyr::group_by(tmrca.dt.half) %>%
+#     dplyr::summarize(total.intros=sum(intros_meansum7d.mean, na.rm=T)) %>% as.data.frame()
+#   summ.single$type<-"singleton"
+#   colnames(summ.single)[1]<-"tmrca.dt"
+#   summ.single$var.WHO<-name
+#   return(summ.single)
+# }
+# # function for sublins
+# summ.sublinz<-function(df, name){
+#     #summarize singles
+#   summ.sublin<-df%>% 
+#     dplyr::group_by(tmrca.dt) %>%
+#     dplyr::summarize(total.intros=sum(intros_meansum7d.mean, na.rm=T)) %>% as.data.frame()
+#   summ.sublin$type<-"sublineage"
+#   summ.sublin$var.WHO<-name
+#   return(summ.sublin)
+# }
+# 
+# 
+# totalba.1.sing<-summ.singlez(ba1.sing, "BA.1")
+# totalba.11.sing<-summ.singlez(ba11.sing, "BA.1.1")
+# totalba.2.sing<-summ.singlez(ba2.sing, "BA.2")
+# 
+# totalba.1.sub<-summ.sublinz(ba1.sub, "BA.1")
+# totalba.11.sub<-summ.sublinz(ba11.sub, "BA.1.1")
+# totalba.2.sub<-summ.sublinz(ba2.sub, "BA.2")
+# 
+# #merge sublin and singles
+# BA1.all<-bind_rows(totalba.1.sing, totalba.1.sub)
+# BA11.all<-bind_rows(totalba.11.sing, totalba.11.sub)
+# BA2.all<-bind_rows(totalba.2.sing, totalba.2.sub)
+
+## AND the VOIs, cause they matter too
+# eta.sing<-read.csv("../03_ancestral/     sing.par.roll.summary.csv")
+# eta.sub<-read.csv("../03_ancestral/2023-02-13_BA1_analysis/sum.par.roll.summary.csv")
+# 
+# iota.sing<-read.csv("../03_ancestral/2023-02-13_BA11_analysis/sing.par.roll.summary.csv")
+# iota.sub<-read.csv("../03_ancestral/2023-02-13_BA11_analysis/sum.par.roll.summary.csv")
+# 
+# zeta.sing<-read.csv("../03_ancestral/2023-02-13_BA2_analysis/sing.par.roll.summary.csv")
+# zeta.sub<-read.csv("../03_ancestral/2023-02-13_BA2_analysis/sum.par.roll.summary.csv")
+# 
+# epsilon.sing<-read.csv("../03_ancestral/2023-02-13_BA1_analysis/sing.par.roll.summary.csv")
+# epsilon.sub<-read.csv("../03_ancestral/2023-02-13_BA1_analysis/sum.par.roll.summary.csv")
+# 
+# mu.sing<-read.csv("../03_ancestral/2023-02-13_BA11_analysis/sing.par.roll.summary.csv")
+# mu.sub<-read.csv("../03_ancestral/2023-02-13_BA11_analysis/sum.par.roll.summary.csv")
+# 
+# kappa.sing<-read.csv("../03_ancestral/2023-02-13_BA2_analysis/sing.par.roll.summary.csv")
+# kappa.sub<-read.csv("../03_ancestral/2023-02-13_BA2_analysis/sum.par.roll.summary.csv")
+
+
+# merge into one dataframe
+# all.intros<-bind_rows(alpha, beta, gamma, delta, ba1, ba11, ba2)
+#including VOIs
+all.intros<-bind_rows(alpha, beta, gamma, delta, zeta,gamma,epsilon, eta, kappa, iota, mu, ba1, ba11, ba2)
+
+# all.intros<-bind_rows(alpha, beta, gamma, delta2, BA1.all, BA11.all, BA2.all)
+
+#plot together
+all.intros$tmrca.dt<-as.Date(all.intros$tmrca.dt)
+
+ylim<-c(0,600)
+
+plot.daily.imports<-all.intros %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",#"top",#c(0.3,0.66),
+        legend.text=element_text(size=rel(0.9)),
+        legend.title = element_text(size=rel(1.1)),
+        plot.margin=margin(1,1,1,10,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=tmrca.dt,y=total.intros,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Daily variant introductions into Canada")+
+  scale_y_continuous(expand=expansion(c(0,0.02)))+
+  VarFillScaleRed2+
+  VarColScaleRed2+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "left",keywidth = 1,keyheight = 1, 
+                           title="Variant",ncol=4))+
+  #ADD INTERVENTIONS
+  #description and lines to axis
+  geom_segment(data=can.var2, aes(y=position2+ylim[2],yend=position2+ylim[2], 
+                              x=Start.date,xend=End.date,color=var.WHO),
+               size=3,alpha=1 )+
+  geom_text(data=can.var2,aes(x=Start.date,label=Description,y=position2+50+ylim[2],
+                              hjust=hjusts), fontface="bold", size=3)
+#plot dat
+plot.daily.imports
+  
+```
+
+## Make a version that is only the lower axis range (pre-omi)
+```{r}
+
+ylim2<-c(0,150)
+
+plot.daily.imports.less<-all.intros %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",#"top",#c(0.3,0.66),
+        legend.text=element_text(size=rel(0.9)),
+        legend.title = element_text(size=rel(1.1)),
+        plot.margin=margin(1,1,1,10,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=tmrca.dt,y=total.intros,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Daily variant introductions into Canada")+
+  scale_y_continuous(expand=expansion(c(0,0.02)))+
+  VarFillScaleRed2+
+  VarColScaleRed2+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "left",keywidth = 1,keyheight = 1, 
+                           title="Variant",ncol=4))+
+  #ADD INTERVENTIONS
+  #description and lines to axis
+  geom_segment(data=can.var2, aes(y=position2+ylim2[2],yend=position2+ylim2[2], 
+                              x=Start.date,xend=End.date,color=var.WHO),
+               size=3,alpha=1 )+
+  geom_text(data=can.var2,aes(x=Start.date,label=Description,y=position2+50+ylim2[2],
+                              hjust=hjusts), fontface="bold", size=3)+
+  coord_cartesian(ylim=ylim2)
+  #plot dat
+plot.daily.imports.less
+ggsave(paste0(f.out,"/Figure1B_zoom.png"),height=4,width=4)
+
+```
+
+
+## Read in the png of the cartoon phylo and grob everything together with A-C
+```{r}
+p.phylo<-cowplot::ggdraw() + cowplot::draw_image("Figure1_plot/cartoon-phylo/cartoon-phylo-BA.png", scale = 1)
+
+plotrow<-plot_grid(plot.daily.ave.voc.cases.fplus, #version with waves
+          plot.daily.imports,
+          labels=LETTERS[1:2], nrow=2, rel_heights=c(0.8,1),
+          align="v",label_x=-0.01) #extra room for axis
+
+#now add the cartoon phylo  
+plot_grid(plotrow, p.phylo, labels=c(NA, "C"),
+          label_x=0.05, label_y=0.85,
+          rel_widths = c(1,0.6),align="h", axis="topleft",
+          rel_heights=c(1,1))
+
+
+ggsave(paste0(f.out,"/Figure1_composite.png"),height=6,width=8.5)
+
+```
+

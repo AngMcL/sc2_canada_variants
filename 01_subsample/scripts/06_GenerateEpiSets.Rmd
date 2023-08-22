@@ -1,0 +1,82 @@
+---
+title: "Untitled"
+author: "Angela"
+date: '2023-03-27'
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+#read in each of the subsampled metadata files and extract a csv of only the EPI_ID_ to get epi_sets from gisaid
+```{r}
+fold.in<-"bootsamples_meta_202208"
+fold.in2<-"bootsamples_meta_omi"
+
+fold.out<-paste0(fold.in,"/epi_sets")
+fold.out2<-paste0(fold.in2,"/epi_sets")
+
+meta.in<-list.files(fold.in,full.names = T,pattern=".csv")
+meta.in2<-list.files(fold.in2,full.names = T,pattern=".csv")
+
+outfiles<-str_replace_all(meta.in, fold.in, fold.out )
+outfiles2<-str_replace_all(meta.in2, fold.in2, fold.out2 )
+
+outfile.single<-paste0(fold.out, "/epi_set_allIDs.csv")
+
+if(!dir.exists(fold.out)){dir.create(fold.out)}
+if(!dir.exists(fold.out2)){dir.create(fold.out2)}
+```
+
+```{r}
+for (i in 1:length(meta.in)){
+  met<-read.csv(meta.in[i])
+  met2<-met[,which(colnames(met) =="Accession.ID")]
+  # nrow(met)==length(met2)
+  write.csv(met2,outfiles[i],row.names = F)
+}
+
+for (i in 1:length(meta.in2)){
+  met<-read.csv(meta.in2[i])
+  met2<-met[,which(colnames(met) =="Accession.ID")]
+  # nrow(met)==length(met2)
+  write.csv(met2,outfiles2[i],row.names = F)
+}
+```
+
+#make a single list for one episet to represent entire study
+```{r}
+met.all<-replicate(n=length(meta.in),vector())
+for (i in 1:length(meta.in)){
+  met.all[[i]]<-read.csv(outfiles[i])
+}
+#bind rows
+met.all.df<-bind_rows(met.all)
+#remove dups
+dups<-which(duplicated(met.all.df))
+met.all.df2<-met.all.df[-dups,] %>% as.data.frame()
+nrow(met.all.df2)==nrow(met.all.df)-length(dups)
+
+
+met.all2<-replicate(n=length(meta.in2),vector())
+#repeat for omicron
+for (i in 1:length(meta.in2)){
+  met.all2[[i]]<-read.csv(outfiles2[i])
+}
+#bind rows
+met.all2.df<-bind_rows(met.all2)
+#remove dups
+dups2<-which(duplicated(met.all2.df))
+met.all2.df2<-met.all2.df[-dups2,] %>% as.data.frame()
+nrow(met.all2.df2)==nrow(met.all2.df)-length(dups2)
+
+## NOW bind the two together
+met.all.final<-bind_rows(met.all.df2, met.all2.df2)
+nrow(met.all.final)
+colnames(met.all.final)<-"Accession.ID "
+write.csv(met.all.final,outfile.single,row.names = F)
+
+####NOTE THAT these exports were all moved to ../01_subSampled GISAID EPI_SET
+```
+

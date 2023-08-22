@@ -1,0 +1,4317 @@
+---
+title: "Summarize the metadata"
+author: "Angela"
+date: "21/07/2020"
+output: github_document
+---
+
+Generate figures and tables that summarize the cases and sequence metadata BEFORE subsampling
+
+## Objectives 
+* Summarize new cases over time for global and Canada (rolling 7 day average) - by location and by variant
+* Summarize number of sequences over time for global and Canada (rolling 7 day average)- by location and by variant
+* Estimate variant daily case counts by geography - use to calculate proportional contirbution of each geo to cases => export and use as probabililty of sampling
+* relationship between number of sequences and number of cases by geography and by month, plot + regression
+* calculate lineage frequencies by location over time
+
+# Setup
+
+## libraries
+```{r setup, include=FALSE}
+library(knitr)
+library(tidyverse)
+library(stringr)
+library(coronavirus)
+library(ggplot2)
+library(RColorBrewer)
+library(zoo)
+library(ggstance)
+library(cowplot)
+library(lubridate)
+library(MASS)
+library(ggrepel)
+library(gtools)
+library(data.table)
+library(ggplotify)
+library(gridExtra)
+library(grid)
+library(lattice)
+library(reshape2)
+library(gdata) 
+```
+
+## inputs and outputs
+```{r}
+# the day of most recent sample
+data.date<-"2022-03-22" 
+start.date<-"2020-11-01" #about when VOCs first started coming to Canada
+
+# set up months for dataframes below for 2021 and 2022
+last.mon<-format(as.Date(data.date), "%m")
+last.mon.l<-24+as.numeric(last.mon) #starts at 0, so actually leads to 13+..
+mons <- format(ymd(as.Date("2019-12-01")) %m+% months(0:last.mon.l),"%Y-%m")
+l.mons<-length(mons)
+
+#pre-subsampled clean data for global and canada
+meta.in.glob<-"CleanMeta_PreSubsamp/global_meta.csv"
+meta.in.can<-"CleanMeta_PreSubsamp/canada_meta.csv" 
+
+## Geo lookup table and colors from previous build
+lookup.geo.in<-"colors_out/lookup.geo.csv"
+geo.colors.in<-"colors_out/global.colors.tsv"
+
+#continents
+continents.in<-"colors_out/countries.csv"
+
+#variant colors
+variant.colors.in<-"colors_out/variant_colors.tsv"
+variant.df.in<-"colors_out/variant.df.csv" #couple manual updates 2023-05-11 based on outbreak.info
+
+# file.exists(variant.df.in)
+# file.exists(meta.in.can)
+
+#PHAC cases over time by prov
+can.cases.in<-"Canada_cases/20220516_covid19_casesbyprov.csv"
+# file.exists(can.cases.in)
+
+#folder out
+today<-Sys.Date()
+f.out<-paste0(today,"_Results_PreSubsamp_omi_2023")
+if(!dir.exists(f.out)){dir.create(f.out)}
+
+## Setup themes and scales for plots
+pubTheme<-theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background=element_rect("grey95"),
+            axis.line = element_line(colour = "black"),
+            legend.key.size = unit(0.5,"line"),
+            text=element_text(size=10,face="bold"),
+            legend.text=element_text(size=8))
+
+pubThemeDate<-pubTheme+theme(axis.text.x=element_text(angle = 45,hjust=1,size=rel(1))) 
+
+scaleDate<-scale_x_date(date_breaks = "1 month", date_minor_breaks = "2 weeks", date_labels = "%b %Y",limits=as.Date(c(start.date,"2022-03-22")),expand=c(0,0))
+
+xdates<-ymd(c("2020-12-01","2021-03-01","2021-06-01","2021-09-01","2021-12-01","2022-03-01"))
+scaleDateBusy<-scale_x_date(breaks=xdates, date_labels = "%b %Y",
+                            limits=as.Date(c(start.date,"2022-03-22")),
+                            expand=c(0,0))
+
+scaleDateFlex<-scale_x_date(date_labels = "%b %Y",expand=c(0,0))
+
+scaleMonthChar<-scale_x_discrete(breaks=c("2020-12","2021-03","2021-06","2021-09","2021-12","2022-03"),labels=c("Dec 2020","Mar 2021","Jun 2021","Sep 2021","Dec 2021","Mar 2022"))
+
+```
+
+## Make a color scheme for all countries with seqs
+```{r}
+#Use new color scheme with fewer groupings
+lookup.geo<-read.csv(lookup.geo.in,header=T) #use later on
+
+#import a tsv of name and hex color for LOCATIONS
+globalPalette<-read.table(geo.colors.in,sep="\t")
+
+## make color scheme
+glob.colz<-row.names(globalPalette)
+globalPalette.ch<-as.character(globalPalette$globalPalette)
+names(globalPalette.ch)<-glob.colz
+
+GlobColScale<-scale_colour_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+GlobFillScale<-scale_fill_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+
+
+CountryColScale<-scale_colour_manual(name = "Global region",
+                                     values = globalPalette.ch[15:length( globalPalette.ch)],
+                                     na.value="grey60")
+CountryFillScale<-scale_fill_manual(name = "Global region",
+                                    values = globalPalette.ch[15:length( globalPalette.ch)]
+                                    ,na.value="grey60")
+```
+
+## VOC color scheme
+Note this is read in from the 00_MergePartitionsSplitCanada script
+```{r}
+varPalette<-read.table(variant.colors.in,sep="\t")
+
+## make color scheme
+var.colz<-as.character(varPalette$vars.ch)
+varPalette.ch<-row.names(varPalette)
+names(varPalette.ch)<-var.colz
+
+# var.colz<-row.names(varPalette)
+# varPalette.ch<-as.character(varPalette$vars.ch)
+# names(varPalette.ch)<-var.colz
+
+VOCColScale<-scale_colour_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+VOCFillScale<-scale_fill_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+
+### FOR SEPEARATE OMI###
+### add separate groups for each omicron group
+omis<-c("BA.1","BA.1.1","BA.2", "BA.3")
+# https://www.colorhexa.com/ec9a91
+omiPalette.ch<-c("#e47266","#e8867b","#f0aea7","#f4c2bc") 
+names(omiPalette.ch)<-omis
+morevarPal<-c(varPalette.ch,omiPalette.ch)
+morevarPal<-morevarPal[-which(names(morevarPal)=="Omicron")]
+
+VarColScale<-scale_colour_manual(name = "Variant",values = morevarPal,na.value=NULL)
+VarFillScale<-scale_fill_manual(name = "Variant",values = morevarPal,na.value=NULL)
+
+## read in the variant df to later remove metacan seqs with dates that are too early
+var.df<-read.csv(variant.df.in)
+
+#add to var.df
+var.omi<-var.df[which(var.df$var.WHO=="Omicron"),]
+var.omi<-rbind(var.omi,var.omi,var.omi,var.omi) #one for each sep lineage considered
+var.omi$var.WHO<-omis
+var.omi$var.lin<-omis
+var.omi$first.glob.date<-c("2021-09-02","2021-09-09","2021-09-21","2021-11-23")
+# var.omi$first.can.date<-c("2021-11-04","2021-11-04","2021-11-29")
+
+#join var.omi onto var.df 
+var.df<-rbind(var.df,var.omi)
+
+#remove 'omicron' full group
+var.df<-var.df[-which(var.df$var.WHO=="Omicron"),]
+```
+
+# Model Canada cases, deaths, and sequences by province, VOC
+
+## Read in case data
+```{r}
+#Read in the provincial summary data (ensure updated since the data.date, ie seq download date)
+prov<-read.csv(can.cases.in, header=T)
+prov<-prov[-1,]
+prov$date<-as.Date(prov$date)
+
+#filter to before the data date
+prov<-prov[which(prov$date<=data.date),]
+
+#filter these categories out
+can<-prov[which(prov$prname=="Canada"),] #|prov$prname=="Repatriated travellers"),] 
+prov<-prov[-which(prov$prname=="Canada"|prov$prname=="Repatriated travellers"),] 
+
+#how many total cases
+# unique(prov$prname)
+range(prov$date)
+sum(prov$numtoday) # 3,418,913
+can$numtotal[which(can$date==data.date)] #3418920
+
+can.totcas<-can$numtotal[which(can$date==data.date)]
+
+#how many cases in provs with no seqs
+noseqs<-c("Yukon","Prince Edward Island","Northwest Territories",  "Nunavut")
+noseq.case<-prov %>%
+  filter(prname %in% noseqs) %>%
+  filter(date==data.date) %>% 
+  summarize(total=sum(numtotal))
+noseq.case/can.totcas*100 #1.182274 %
+
+#add a column for month
+prov$date<-as.Date(prov$date)
+prov$month<-format(prov$date, "%Y-%m")
+
+## Make a color scheme for all Can provs/terrs
+#sort by most diagnoses in the study period
+ord.prov<-prov%>%
+  filter(date>start.date)%>% 
+  dplyr::group_by(prname) %>%
+  dplyr::summarise(.groups="rowwise",n=sum(numtoday)) %>% as.data.frame()
+ord.prov<-ord.prov[rev(order(ord.prov$n)),'prname']
+# ord.prov<-names(globalPalette.ch)[1:13]
+#re-order them
+# ord.prov<-ord.prov[c(2,4,6,5,3,1,7,9,8)]
+
+ProvColScale<-scale_color_manual(name = "Location",values = globalPalette.ch[match(ord.prov,names(globalPalette.ch))], na.value="grey60")
+ProvFillScale<-scale_fill_manual(name = "Location",values = globalPalette.ch[match(ord.prov,names(globalPalette.ch))], na.value="grey60")
+
+prov$prname<-factor(prov$prname, levels=ord.prov)
+#I checked that the rolling mean included in the dataset is the same as I would calculate, 7 day right aligned
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+prov$avgtotal_mod<-prov$avgtotal_last7
+for (i in 1:nrow(prov)){ 
+  #if avg is NA or 0
+  if(is.na(prov$avgtotal_mod[i]) | prov$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(prov$numtoday[i])){
+      prov$avgtotal_mod[i]<-prov$numtoday[i]
+    }
+  }
+}
+
+#write this object
+write.csv(prov, paste(f.out,"/prov.csv",sep=""),row.names = F)
+write.csv(can, paste(f.out,"/can.csv",sep=""),row.names = F)
+```
+
+## Plot rolling daily average of cases in Can, by prov
+```{r}
+#timeline restricted to after november 2020
+prov$date<-as.Date(prov$date)
+prov$prname<-factor(prov$prname,levels=ord.prov)
+plot.cases.can<-prov %>%
+  ggplot()+
+  labs(x=NULL, y="Average new diagnoses")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.4,0.7),
+        legend.text=element_text(size=rel(0.8)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(3,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=prname,fill=prname),stat="identity",width=1)+
+  scaleDateBusy+
+  ProvFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(fill=guide_legend(title="Province/Territory",title.position = "top", 
+                           keywidth = 0.8,keyheight = 0.8,ncol=2))
+plot.cases.can
+ggsave(paste(f.out,"/CanAvgDiagByProv.png",sep=""),width=5,height=3,units="in")
+```
+
+```{r}
+plot.cases.can.noleg<-plot.cases.can + theme(legend.position="none")
+#make version as above with the Canada map instead as in the 2020 paper
+fullplotz<-plot_grid(plot.cases.can.noleg)
+
+can.cases.map<-ggdraw() +  
+  draw_plot(fullplotz) +
+  # draw_plot(p.map,scale=0.32,halign = 0.25,valign=0.99)
+  draw_image("../../20210301_phylogeo/01_subSample/Results/PlainMap_GlobalPalette_alllab2023.png",
+             scale=0.7,halign = 0.4,valign=0.9)
+can.cases.map
+ggsave(paste(f.out,"/CanAvgDiagByProv_MAP.png",sep=""),width=5,height=3,units="in")
+```
+
+## make a version per capita
+```{r}
+#read in the population sizes per prov
+census<-read.csv("Canada_cases/statcanPop_20210322.csv")
+census$Provinces.and.territories
+census<-census[1:13,]
+census$prname<-census$Provinces.and.territories
+
+#add a column to a duplicated df
+prov.2<-prov
+all(prov.2$prname %in% census$prname)
+prov.2<-left_join(prov.2, census, by="prname")
+prov.2$Population<-str_replace_all(prov.2$Population,",","")
+prov.2$Population<-as.numeric(prov.2$Population)
+#calculate a per capita rate
+prov.2<-prov.2 %>% mutate(avgtotal_percap=avgtotal_mod/Population*100000)
+
+#plot dat
+prov.2$prname<-factor(prov.2$prname,levels=ord.prov)
+plot.cases.can.percap<-prov.2 %>%
+  ggplot()+
+  labs(x=NULL, y="Average new diagnoses\nper 100,000")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.4,0.7),
+        legend.text=element_text(size=rel(0.8)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(3,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_percap,group=prname,fill=prname),stat="identity",width=1)+
+  scaleDateBusy+
+  ProvFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(fill=guide_legend(title="Province/Territory",title.position = "top", 
+                           keywidth = 0.8,keyheight = 0.8,ncol=2))
+plot.cases.can.percap
+ggsave(paste(f.out,"/CanAvgDiagByProv_PerCapita.png",sep=""),width=5,height=3,units="in")
+
+plot.cases.can.percap.no.leg<-plot.cases.can.percap+theme(legend.position = "none")
+ggsave(paste(f.out,"/CanAvgDiagByProv_PerCapita_noleg.png",sep=""),width=5,height=3,units="in")
+
+#make a line plot version
+plot.cases.can.percap.line<-prov.2 %>%
+  ggplot()+
+  labs(x=NULL, y="Average new diagnoses\nper 100,000")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.4,0.7),
+        legend.text=element_text(size=rel(0.8)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(3,1,1,1,unit="pt"))+
+  geom_line(aes(x=date,y=avgtotal_percap,group=prname,color=prname),stat="identity")+
+  scaleDateBusy+
+  ProvColScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(color=guide_legend(title="Province/Territory",title.position = "top", 
+                           keywidth = 0.8,keyheight = 0.8,ncol=2))
+plot.cases.can.percap.line
+ggsave(paste(f.out,"/CanAvgDiagByProv_PerCapita_line.png",sep=""),width=5,height=3,units="in")
+```
+
+
+## Plot rolling average covid deaths in Can by prov/terr
+```{r}
+#Make a composite that has individual 'numdeathstoday' for observations before rolling average could be calculated
+prov$avgtotal_deaths_mod<-prov$avgdeaths_last7
+for (i in 1:nrow(prov)){ 
+  #if avg is NA or 0
+  if(is.na(prov$avgtotal_deaths_mod[i]) | prov$avgtotal_deaths_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(prov$numdeathstoday[i])){
+      prov$avgtotal_deaths_mod[i]<-prov$numdeathstoday[i]
+    }
+  }
+}
+
+#restricted to after november 2020
+plot.deaths.can<-prov %>%
+  ggplot()+
+  labs(x=NULL, y="Average COVID-19 deaths")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",#c(0.5,0.7),
+        legend.text=element_text(size=rel(0.7)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_deaths_mod,group=prname,fill=prname),stat="identity",width=1)+
+  scaleDateBusy+
+  ProvFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(fill=guide_legend(title="Province/Territory",title.position = "top", 
+                           keywidth = 0.7,keyheight = 0.7,ncol=2))
+plot.deaths.can
+ggsave(paste(f.out,"/CanAvgDeathsByProv.png",sep=""),width=5,height=2.8,units="in")
+
+```
+
+## Make a version per capita
+```{r}
+#add a column to a duplicated df
+prov.2<-prov
+# all(prov.2$prname %in% census$prname)
+prov.2<-left_join(prov.2, census, by="prname")
+prov.2$Population<-str_replace_all(prov.2$Population,",","")
+prov.2$Population<-as.numeric(prov.2$Population)
+#calculate a per capita rate
+prov.2<-prov.2 %>% mutate(avgtotal_deaths_percap=avgtotal_deaths_mod/Population*100000)
+#make a rolling average
+prov.3<-prov.2 %>% group_by(prname) %>% mutate(avgtotal_deaths_percap_roll=zoo::rollmean(avgtotal_deaths_percap,k = 7,fill = NA,align="right") )
+# head(prov.3)
+prov.3$prname<-factor(prov.3$prname,levels=ord.prov)
+plot.deaths.can.percap<-prov.3 %>%
+  ggplot()+
+  labs(x=NULL, y="Average COVID-19 deaths per 100,000")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",#c(0.5,0.7),
+        legend.text=element_text(size=rel(0.7)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_deaths_percap_roll,group=prname,fill=prname),stat="identity")+
+  scaleDateBusy+
+  ProvFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(fill=guide_legend(title="Province/Territory",title.position = "top", 
+                           keywidth = 0.7,keyheight = 0.7,ncol=2))
+plot.deaths.can.percap
+ggsave(paste(f.out,"/CanAvgDeathsByProv_percapita.png",sep=""),width=5,height=3,units="in")
+
+#make this as a line plot
+plot.deaths.can.percap.line<-prov.3 %>%
+  ggplot()+
+  labs(x=NULL, y="Average COVID-19\ndeaths per 100,000")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",#c(0.5,0.7),
+        legend.text=element_text(size=rel(0.7)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_line(aes(x=date,y=avgtotal_deaths_percap_roll,group=prname,color=prname))+
+  scaleDateBusy+
+  ProvColScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(color=guide_legend(title="Province/Territory",title.position = "top", 
+                           keywidth = 0.7,keyheight = 0.7,ncol=2))
+plot.deaths.can.percap.line
+ggsave(paste(f.out,"/CanAvgDeathsByProv_percapita_line.png",sep=""),width=5,height=3,units="in")
+
+```
+
+## Plot case fatality rate
+```{r}
+plot.percentdeaths.can<-prov %>%
+  ggplot()+
+  labs(x=NULL, y="Case fatality rate (deaths per 100 cases)")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.55,0.7),
+        legend.text=element_text(size=rel(0.6)),
+        axis.title.y.left =element_text(size=rel(0.7)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_line(aes(x=date,y=percentdeath,group=prname,color=prname),stat="identity")+
+  scaleDateBusy+
+  ProvColScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(color=guide_legend(
+                            title="Province/Territory",title.position = "top", 
+                            keywidth = 1,keyheight = 0.3,ncol=2))
+plot.percentdeaths.can
+ggsave(paste(f.out,"/CanPercentDeathsByProv.png",sep=""),width=5,height=3,units="in")
+
+```
+
+## export as a single grob
+```{r}
+plot.cases.can.noleg.noax<-plot.cases.can + theme(legend.position="none",axis.text.x=element_blank(),
+                                          plot.margin = margin(2,2,0,3,"pt"))
+#make version as above with the Canada map instead as in the 2020 paper
+fullplotz.noax<-plot_grid(plot.cases.can.noleg.noax)
+can.cases.map.noax<-ggdraw() +  
+  draw_plot(fullplotz.noax) +
+  # draw_plot(p.map,scale=0.32,halign = 0.25,valign=0.99)
+  draw_image("../../20210301_phylogeo/01_subSample/Results/PlainMap_GlobalPalette_alllab2023.png", scale=0.9,halign = 0.4,valign=0.85)
+
+plot.deaths.can.noax<-plot.deaths.can + theme(axis.text.x=element_blank(),
+                                          plot.margin = margin(2,2,0,11,"pt"))
+plot.percentdeaths.can.marg<-plot.percentdeaths.can+theme(plot.margin = margin(2,2,2,16,"pt"))
+plot_grid(can.cases.map.noax, plot.deaths.can.noax, plot.percentdeaths.can.marg, 
+          labels=c("A","B","C"),
+          label_size = 12,align="v",axis="rtb",nrow = 3, 
+          rel_heights = c(0.8,0.8,0.8),
+          label_x=0,label_y=1)
+ggsave(paste0(f.out,"/composite_canada_casesdeathsCFR.png"),height=7,width=5,units="in")
+```
+
+## Make another version that also has per capita
+```{r}
+plot.deaths.can.percap.line.marg<-plot.deaths.can.percap.line+theme(plot.margin = margin(2,2,2,16,"pt"))
+plot.cases.can.percap.line.marg<-plot.cases.can.percap.line+theme(plot.margin = margin(2,2,2,16,"pt"))
+
+#make two columns
+col1<-plot_grid(can.cases.map.noax, plot.deaths.can.noax, plot.percentdeaths.can.marg, 
+          labels=c("A","B","C"),
+          label_size = 12,align="v",axis="rtb",nrow = 3, 
+          rel_heights = c(0.8,0.8,0.8),
+          label_x=0,label_y=1)
+col2<-plot_grid(plot.cases.can.percap.line.marg,
+                plot.deaths.can.percap.line.marg, 
+                NULL,
+          labels=c("D","E",NULL),
+          label_size = 12,align="v",axis="rtb",nrow = 3, 
+          rel_heights = c(0.8,0.8,0.8),
+          label_x=0,label_y=1)
+plot_grid(col1,col2,nrow=1,ncol=2,labels=NULL,align="hv")
+ggsave(paste0(f.out,"/composite_canada_casesdeathsCFR_pluspercap.png"),height=7,width=9,units="in")
+
+#make a single facetted plot for the per capita rates
+plot_grid(plot.cases.can.percap.line,
+          plot.deaths.can.percap.line,
+          labels=c("A","B"),
+          align="v",ncol=1,
+          label_x=-0.01)
+ggsave(paste0(f.out,"/composite_percapita_casesdeaths.png"),height=5.5,width=5,units="in")
+```
+
+
+## Read in clean Canadian metadata for sequences
+```{r}
+#read em and weep
+meta.can<-read.csv(file = meta.in.can, header = TRUE)
+
+### CHANGE to split omicron lineages into their owncats
+omi.ba1<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.1")
+omi.ba11<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.1.1")
+omi.ba2<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.2")
+
+meta.can$var.WHO[omi.ba1]<-"BA.1"
+meta.can$var.WHO[omi.ba11]<-"BA.1.1"
+meta.can$var.WHO[omi.ba2]<-"BA.2"
+
+# table(meta.can$Lineage[meta.can$var.WHO=="Omicron"]) #BA.1 BA.1.1   BA.2 and 2 None
+#remove the lineage==none within omicron, n=2
+no.omi<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="None")
+if(length(no.omi)>0){
+  meta.can<-meta.can[-no.omi,]
+}
+
+#remove any meta can from 2020-01-01
+# meta.can$date[which(meta.can$date<as.Date("2020-01-29"))]
+if(any(meta.can$date<as.Date("2020-01-29"))){ #the first identified case date
+  meta.can<-meta.can[-which(meta.can$date<as.Date("2020-01-29")),]
+}
+
+#in order of first appearances in Canada, excluding if earlier than glob date
+too.early<-c() #vector of IDs that need to be removed
+var.df$first.can.date<-NA
+for (i in 1:nrow(var.df)){
+  mydates<-meta.can$date[which(meta.can$var.WHO == var.df$var.WHO[i] & 
+                                 meta.can$incomp==0)]
+  tooearly<-which(mydates < as.Date(var.df$first.glob.date[i]))
+  my.early.IDs<-meta.can$Accession.ID[which(meta.can$var.WHO == var.df$var.WHO[i] &
+                                              meta.can$date < as.Date(var.df$first.glob.date[i]))]
+  too.early<-c(too.early, my.early.IDs)
+  if(length(tooearly)>1){
+    mydates<-mydates[-tooearly]
+  }
+  #take the earliest in canada into the var.df
+  var.df$first.can.date[i]<-first(sort(mydates))
+}
+
+#how many weirdos?
+# print(length(too.early))
+
+#get rid of them! 
+if(length(which(meta.can$Accession.ID %in% too.early)>0)){
+  meta.can<-meta.can[-which(meta.can$Accession.ID %in% too.early),]
+}
+
+#export this list to also filter during subsamp
+write.csv(too.early,paste(f.out,"/too.early.IDs.Can.csv",sep=""))
+
+#order the variants 
+var.df<-var.df[with(var.df, order(var.df$first.can.date, decreasing = F)),]
+var.df<-var.df[c(1:14,16,15,17),] #make ba.1 come before ba.1.1
+var.ord<-var.df$var.WHO
+var.ord.red<-var.ord[-which(var.ord %in% c("Theta","Lambda","GH/490R","BA.3"))]
+
+#dave a new version of df with the can dates
+write.csv(var.df, paste(f.out,"/variant.df.can.csv",sep=""),row.names = F)
+
+# ## how many are we working with
+print(nrow(meta.can)) #274,419
+
+#write the updated meta.can
+# write.csv(meta.can,paste(f.out,"/meta.can.csv",sep=""),row.names = F)
+
+#write this table of sequence availability by prov, month, VOC
+# can.seq.rep<-table(meta.can$month,meta.can$division, meta.can$var.WHO)
+# write.csv(can.seq.rep,paste0(f.out,"/CanSequenceAvailableByProvMonthVOC.csv"))
+```
+
+## shortcut - if don't want to run above chunk 
+```{r}
+# prov<-read.csv("Results_PreSubsamp/prov.csv")
+# prov$date<-as.Date(prov$date)
+# #sort by most diagnoses in the study period
+# ord.prov<-prov%>%
+#   filter(date>start.date)%>% 
+#   dplyr::group_by(prname) %>%
+#   dplyr::summarise(.groups="rowwise",n=sum(numtoday)) %>% as.data.frame()
+# ord.prov<-ord.prov[rev(order(ord.prov$n)),'prname']
+# prov$prname<-factor(prov$prname,levels=ord.prov)
+# 
+# meta.can<-read.csv("Results_PreSubsamp/meta.can.csv")
+# var.df<-read.csv("Results_PreSubsamp/variant.df.can.csv")
+# var.ord<-var.df$var.WHO
+# var.ord.red<-var.ord[-which(var.ord %in% c("Theta","Lambda","GH/490R"))]
+# can<-read.csv("Results_PreSubsamp/can.csv")
+```
+
+```{r}
+#make a restricted color scheme
+ord.prov.res<-ord.prov[which(ord.prov %in% unique(meta.can$division))]
+ProvFillScale2<-scale_fill_manual(name = "Location",
+                                 values = globalPalette.ch [match(ord.prov.res,names(globalPalette.ch))],
+                                 na.value="grey60")
+
+ProvColScale2<-scale_color_manual(name = "Location",
+                                 values = globalPalette.ch [match(ord.prov.res,names(globalPalette.ch))],
+                                 na.value="grey60")
+```
+
+
+## Plot daily average # sequences by province
+```{r}
+#summarize by day
+meta.can.daily<-meta.can %>% dplyr::group_by(division,date)%>%
+  dplyr::summarise(.groups="rowwise",total=n())
+
+#need to add rows for missing dates
+alldays<-seq(ymd(first(sort(meta.can.daily$date))),
+    ymd(last(sort(meta.can.daily$date))),
+    by='1 day')
+  
+#make an empty df in same structure as above then populate it
+nL<-length(unique(meta.can.daily$division))
+nD<-length(alldays)
+meta.can.daily.full<-data.frame(date=rep(alldays,times=nL),
+                            division= sort(rep(unique(meta.can.daily$division),times=nD)),
+                                 total=0)
+#populate it
+for (i in 1:nrow(meta.can.daily.full)){
+  #look for a match
+  match<-which(meta.can.daily$division==meta.can.daily.full$division[i] &
+          meta.can.daily$date==meta.can.daily.full$date[i])
+  if(length(match)==0) next #no match, no change
+  #else, replace:
+ meta.can.daily.full$total[i]<-meta.can.daily$total[match]
+}
+  
+#calculate rolling averages
+meta.can.daily.full$avgtotal <-  zoo::rollmean(meta.can.daily.full$total,k = 7,fill = NA,align="right") 
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+meta.can.daily.full$avgtotal_mod<-meta.can.daily.full$avgtotal
+for (i in 1:nrow(meta.can.daily.full)){ 
+  #if avg is NA or 0
+  if(is.na(meta.can.daily.full$avgtotal_mod[i]) | meta.can.daily.full$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(meta.can.daily.full$total[i])){
+      meta.can.daily.full$avgtotal_mod[i]<-meta.can.daily.full$total[i]
+    }
+  }
+}
+
+#order the provs
+total.overall<-meta.can.daily.full%>%
+  dplyr::group_by(division)%>%
+  dplyr::summarise(.groups="rowwise",tot=sum(total)) %>% 
+  as.data.frame() 
+# prov.ord2<-total.overall[with(total.overall,order(total.overall$tot,decreasing = T)),c("division")]
+meta.can.daily.full$division<-factor(meta.can.daily.full$division,levels=ord.prov)
+
+#write the updated meta.can.daily.full
+
+# write.csv(meta.can.daily.full,paste(f.out,"/meta.can.daily.full.csv",sep=""),row.names = F)
+
+#order 
+meta.can.daily.full$division<-factor(meta.can.daily.full$division, 
+                                     levels=ord.prov.res)
+## PLOT average daily sequences for all of Canada
+plot.daily.ave.seqs.prov<-meta.can.daily.full%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=division,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  ProvFillScale2+
+  scaleDateBusy
+
+plot.daily.ave.seqs.prov
+ggsave(paste(f.out,"/CanAverageDailySequencesByProvince.png",sep=""), height=3,width=5,units="in")
+
+```
+
+## Plot average daily sequence representation by province
+```{r}
+#merge the rolling average daily diagnoses and total sequences together by day and province
+meta.can.daily.full.red<-meta.can.daily.full[,c("date","division","avgtotal_mod")]
+colnames(meta.can.daily.full.red)<-c("date","division","avg_seqs")
+prov.reduced<-prov[,c("date","prname","avgtotal_mod","month")]
+colnames(prov.reduced)<-c("date","division","avg_cases","month")
+prov.reduced$division<-as.factor(prov.reduced$division)
+prov.reduced$date<-as.Date(prov.reduced$date)
+class(meta.can.daily.full.red$date)
+class(meta.can.daily.full.red$division)
+
+can.cases.seqs.daily<-left_join(meta.can.daily.full.red, prov.reduced, by=c("date","division"))
+
+#replace NAs with zeros
+can.cases.seqs.daily$avg_seqs<-na.replace(can.cases.seqs.daily$avg_seqs, 0)
+
+#calculate seq.rep=seq/case
+can.cases.seqs.daily<-can.cases.seqs.daily %>% mutate(avg_seqpercase=avg_seqs/avg_cases)
+# hist(can.cases.seqs.daily$avg_seqs)
+# hist(can.cases.seqs.daily$avg_cases)
+# hist(can.cases.seqs.daily$avg_seqpercase)
+
+can.cases.seqs.daily $division<-factor(can.cases.seqs.daily$division,levels=ord.prov.res)
+#plot this over time by division
+plot.daily.seqrep.byprov<-can.cases.seqs.daily %>%
+  filter(date>as.Date(start.date)) %>%
+  ggplot()+
+  geom_line(aes(x=date,y=avg_seqpercase,color=division))+
+  labs(y="Average sequence per case",x=NULL)+
+  scaleDateBusy+
+  ProvColScale+
+  theme(legend.position = "none")+
+  facet_wrap(~division, scales="free_y")+
+  pubThemeDate
+  # scale_y_continuous(limits=c(0,2))
+#these are pretty off... due to data dumps and inferring incomplete dates as random dates
+plot.daily.seqrep.byprov
+ggsave(paste(f.out,"/CanAverageDailySequenceRep.byProv.png",sep=""),width=8, height=4, units="in")  
+
+```
+
+## Plot daily average sequences by VOC group for Canada 
+```{r}
+#summarize by day
+meta.can.var.daily<-meta.can %>% dplyr::group_by(date,var.WHO)%>%
+  dplyr::summarise(.groups="rowwise",total=n())
+
+#need to add rows for missing dates
+alldays<-seq(ymd(first(sort(meta.can.var.daily$date))),
+    ymd(last(sort(meta.can.var.daily$date))),
+    by='1 day')
+  
+allvars<-unique(meta.can.var.daily$var.WHO)
+emptydf<-meta.can.var.daily[0,]
+emptydf$date<-as.Date(emptydf$date)
+
+for (j in 1:length(allvars)){
+    myvar<-allvars[j]
+    myrows<-which( meta.can.var.daily$var.WHO==myvar)
+    #which days aren't covered
+    missingdays<-alldays[which(!alldays %in% meta.can.var.daily$date[myrows])]
+    #make a tempdf then bind it to the emptydf
+    emptydf<-bind_rows(emptydf, 
+                       data.frame(date=missingdays,var.WHO=myvar, total=0))
+}
+
+#bind the blank df to the other df
+meta.can.var.daily$date<-as.Date(meta.can.var.daily$date)
+meta.can.var.daily.full<-bind_rows(meta.can.var.daily, emptydf)
+
+# sort by date var
+meta.can.var.daily.full<-meta.can.var.daily.full[
+  with(meta.can.var.daily.full, order(var.WHO, date)),
+]
+
+#calculate rolling averages
+meta.can.var.daily.full$avgtotal <- zoo::rollmean(meta.can.var.daily.full$total,
+                                                  k = 7,fill = NA,align="right") 
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+meta.can.var.daily.full$avgtotal_mod<-meta.can.var.daily.full$avgtotal
+for (i in 1:nrow(meta.can.var.daily.full)){ 
+  #if avg is NA or 0
+  if(is.na(meta.can.var.daily.full$avgtotal_mod[i]) | meta.can.var.daily.full$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(meta.can.var.daily.full$total[i])){
+      meta.can.var.daily.full$avgtotal_mod[i]<-meta.can.var.daily.full$total[i]
+    }
+  }
+}
+
+#order the vars
+# total.overall<-meta.can.var.daily.full%>%dplyr::group_by(var.WHO)%>%dplyr::summarise(.groups="rowwise",tot=sum(total)) %>% as.data.frame() 
+# var.ord<-total.overall[with(total.overall,order(total.overall$tot,decreasing = T)),c("var.WHO")]
+#order the variants
+meta.can.var.daily.full$var.WHO<-factor(meta.can.var.daily.full$var.WHO,levels=var.ord)
+
+VarFillScale2<-scale_fill_manual(name = "Variant",values = morevarPal[match(var.ord,names(morevarPal))],na.value="grey60")
+
+VarFillScaleRed<-scale_fill_manual(name = "Variant",values = morevarPal[match(var.ord.red,names(morevarPal))],na.value="grey60")
+
+## PLOT average daily sequences by province
+plot.daily.ave.seqs.voc.can<-meta.can.var.daily.full%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(0.9)),
+        legend.position=c(0.25,0.85),
+        legend.text=element_text(size=rel(0.5)),
+        legend.title = element_text(size=rel(0.7)),
+        legend.margin = margin(2,2,2,2,unit="pt"),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=expansion(add = c(0,150)))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title="Variant",title.position = "top", 
+                           keywidth = 0.5,keyheight = 0.5,ncol=4))
+
+plot.daily.ave.seqs.voc.can
+ggsave(paste(f.out,"/CanAverageDailySequencesByVOC.png",sep=""), height=3,width=5,units="in")
+
+```
+
+## Plot daily average proportions of VOC for Canada
+```{r}
+#calculate the proportions
+meta.can.var.daily.full2<-meta.can.var.daily.full
+
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.can.var.daily.full2$prop<-as.numeric(NA)
+for (i in 1:nrow(meta.can.var.daily.full2)){
+  meta.can.var.daily.full2$prop[i]<-meta.can.var.daily.full2$avgtotal_mod[i]/sum(meta.can.var.daily.full2$avgtotal_mod [which(meta.can.var.daily.full2$date==meta.can.var.daily.full2$date[i])])
+}
+  
+#replace NA and inf with 0
+meta.can.var.daily.full2$prop<-na.replace(meta.can.var.daily.full2$prop,0)
+
+#plot the proportional VOC contribs for whole of canada
+plot.proportion.VOC.canada<-meta.can.var.daily.full2 %>% 
+  ggplot( aes(x=date,y=prop,group=var.WHO, fill=var.WHO))+
+  geom_bar(position="stack",stat="identity",lwd=0,width=1)+
+  VarFillScale2+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")
+plot.proportion.VOC.canada
+ggsave(paste(f.out,"/AverageDailySequencesByVOC_Canada_proportion.png",sep=""), height=3,width=5,units="in")
+```
+
+## Impute estimated variant cases for Canada
+```{r}
+## multiply the daily average proportions by the daily average sequences for all of Canada
+#daily average cases for Canada
+# head(can$avgtotal_last7)
+
+#make a modified count with incomplete dates
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+can$avgtotal_mod<-can$avgtotal_last7
+for (i in 1:nrow(can)){ 
+  #if avg is NA or 0
+  if(is.na(can$avgtotal_mod[i]) | can$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(can$numtoday[i])){
+      can$avgtotal_mod[i]<-can$numtoday[i]
+    }
+  }
+}
+
+#reduce can data
+can.red<-can[,c("date","avgtotal_mod")]
+colnames(can.red)<-c("date","avgtotal_cases")
+can.red$date<-as.Date(can.red$date)
+meta.can.var.daily.full3<-left_join(meta.can.var.daily.full2, can.red, by="date")
+#replace NAs with zeroes
+meta.can.var.daily.full3$avgtotal_cases<-na.replace(meta.can.var.daily.full3$avgtotal_cases, 0)
+# head(meta.can.var.daily.full3)
+
+#compute the avgVOC_cases
+meta.can.var.daily.full3<-meta.can.var.daily.full3 %>% mutate(avgVOC_cases = prop * avgtotal_cases)
+
+#Plot the avgVOC_cases by var.WHO for all of Canada
+plot.daily.ave.voc.cases<-meta.can.var.daily.full3%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.2,0.66),
+        legend.text=element_text(size=rel(0.8)),
+        legend.title = element_text(size=rel(1)),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.8,keyheight = 0.8, 
+                           title="Variant",ncol=2))
+plot.daily.ave.voc.cases
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_Canada.png",sep=""), height=3,width=5,units="in")
+
+#look at small y scale
+#Plot the avgVOC_cases by var.WHO for all of Canada
+plot.daily.ave.voc.cases.short<-meta.can.var.daily.full3%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.6,0.8),
+        legend.text=element_text(size=rel(0.6)),
+        legend.title = element_text(size=rel(0.7)),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.6,keyheight = 0.6, 
+                           title="Variant",ncol=3))+
+  coord_cartesian(ylim=c(0,1000))
+plot.daily.ave.voc.cases.short
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_Canada_short.png",sep=""), height=3,width=5,units="in")
+
+#write this object for use in the post subsampling script
+write.csv(meta.can.var.daily.full3,paste0(f.out,"/meta.can.var.daily.full3.csv"))
+
+```
+
+##Make a version of the variant cases in Canada with omicron in place of BA.* and with direct annotations for the bigges
+```{r}
+var.ord.red2<-var.ord.red[-which(var.ord.red %in% c( "BA.1","BA.1.1" ,"BA.2"))]
+var.ord.red2<-var.ord.red2 %>% c("Omicron")
+
+morevarPal2<-morevarPal
+morevarPal2<-morevarPal2[-which(names(morevarPal2) %in% c( "BA.1","BA.2"))]
+names(morevarPal2)[which(names(morevarPal2)=="BA.1.1")]<-"Omicron"
+
+VarFillScaleRed2<-scale_fill_manual(name = "Variant",values = morevarPal2[match(var.ord.red2,names(morevarPal2))],na.value="grey60")
+
+meta.can.var.daily.full3.2<-meta.can.var.daily.full3
+meta.can.var.daily.full3.2$var.WHO<-str_replace_all(meta.can.var.daily.full3.2$var.WHO, c("BA.1"="Omicron", "BA.1.1"="Omicron","BA.2"="Omicron"))
+meta.can.var.daily.full3.2$var.WHO<-str_replace_all(meta.can.var.daily.full3.2$var.WHO,"Omicron.1","Omicron")
+meta.can.var.daily.full3.2$var.WHO<-factor(meta.can.var.daily.full3.2$var.WHO,
+                                           levels=var.ord.red2)
+#Plot the avgVOC_cases by var.WHO for all of Canada
+plot.daily.ave.voc.cases.f1<-meta.can.var.daily.full3.2%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.3,0.66),
+        legend.text=element_text(size=rel(0.9)),
+        legend.title = element_text(size=rel(1.1)),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases in Canada")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed2+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 1,keyheight = 1, 
+                           title="Variant",ncol=2))
+plot.daily.ave.voc.cases.f1
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_Canada_FIG1A.png",sep=""), height=3,width=5,units="in")
+
+#TEST
+# temp<-meta.can.var.daily.full3.2 %>% 
+#   unite(col="temp",1:3,remove = F)
+# head(temp)
+# #then id dups of it
+# dupz<-which(duplicated(temp$temp))
+# length(dupz)
+# #dupz here because omicron
+# table(temp$var.WHO[dupz])
+```
+
+## Make a supplement plot for Canada var-spec case estimation
+```{r}
+plot.daily.ave.seqs.voc.noax.can<-plot.daily.ave.seqs.voc.can+theme(axis.text.x  = element_blank(),
+                                                            plot.margin = margin(2,2,0,2,"pt"))
+plot.daily.ave.seqs.voc.noax.can.noleg<-plot.daily.ave.seqs.voc.noax.can+theme(legend.position="none")
+
+plot.proportion.VOC.canada.noax<-plot.proportion.VOC.canada+theme(axis.text.x  =element_blank(),
+                                                            plot.margin = margin(2,2,0,2,"pt"))
+plot.daily.ave.voc.cases.noleg.can<-plot.daily.ave.voc.cases+theme(axis.text.x  =element_blank(),
+                                                               legend.position="none",
+                                                            plot.margin = margin(2,2,0,2,"pt"))
+plot.daily.ave.voc.cases.short2.can<-plot.daily.ave.voc.cases.short+theme(legend.position="none",
+                                                            plot.margin = margin(2,2,2,2,"pt"))
+
+plot.can.varcase<-plot_grid(plot.daily.ave.seqs.voc.noax.can.noleg, plot.proportion.VOC.canada.noax, plot.daily.ave.voc.cases.noleg.can,plot.daily.ave.voc.cases.short2.can,
+          labels=LETTERS[1:4],nrow=4,
+          align="v", label_x = 0.03,label_y=0.95,
+          rel_heights=c(1,0.8,0.7,0.9))
+plot.can.varcase
+ggsave(paste0(f.out,"/plot.can.varcase.png"),height=9,width=6,units="in")
+
+```
+
+## Daily average sequences of each VOC for each province 
+```{r}
+#summarize by day voc and prov
+meta.can.var.prov.daily<-meta.can %>% dplyr::group_by(date,var.WHO,division)%>%
+  dplyr::summarise(.groups="rowwise",total=n())
+
+#need to add rows for missing dates
+alldays<-seq(ymd(first(sort(meta.can.var.prov.daily$date))),
+    ymd(last(sort(meta.can.var.prov.daily$date))),
+    by='1 day')
+  
+## Different approach that is faster and better!!
+alldivs<-unique(meta.can.var.prov.daily$division)
+allvars<-unique(meta.can.var.prov.daily$var.WHO)
+
+emptydf<-meta.can.var.prov.daily[0,]
+emptydf$date<-as.Date(emptydf$date)
+meta.can.var.prov.daily$date<-as.Date(meta.can.var.prov.daily$date)
+#for each division
+for (i in 1:length(alldivs)){
+  mydiv<-alldivs[i]
+  #for each var
+  for (j in 1:length(allvars)){
+    myvar<-allvars[j]
+    myrows<-which(meta.can.var.prov.daily$division==mydiv &
+                    meta.can.var.prov.daily$var.WHO==myvar)
+    #which days aren't covered
+    ### ADDED subset here for my rows
+    missingdays<-alldays[which(!alldays %in% meta.can.var.prov.daily$date[myrows])]
+    #make a tempdf then bind it to the emptydf
+    emptydf<-bind_rows(emptydf, 
+                       data.frame(date=missingdays,var.WHO=myvar, division=mydiv, total=0))
+  }
+}
+
+
+#bind the blank df to the other df
+# meta.can.var.prov.daily$date<-as.Date(meta.can.var.prov.daily$date)
+meta.can.var.prov.daily.full<-bind_rows(meta.can.var.prov.daily, emptydf)
+
+# sort by date within division and var
+meta.can.var.prov.daily.full<-meta.can.var.prov.daily.full[
+  with(meta.can.var.prov.daily.full, order(division, var.WHO, date)),
+]
+
+#TEST
+# temp<-meta.can.var.prov.daily.full %>% 
+#   unite(col="temp",1:3,remove = F)
+# head(temp)
+# #then id dups of it
+# dupz<-which(duplicated(temp$temp))
+# length(dupz)
+
+#calculate rolling averages
+meta.can.var.prov.daily.full <- meta.can.var.prov.daily.full %>% 
+  dplyr::group_by(var.WHO, division) %>% 
+  dplyr::mutate(avgtotal = zoo::rollmean(total,k = 7,fill = NA,align="right") )
+
+#check
+# class(meta.can.var.prov.daily.full$avgtotal)
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+meta.can.var.prov.daily.full$avgtotal_mod<-meta.can.var.prov.daily.full$avgtotal
+for (i in 1:nrow(meta.can.var.prov.daily.full)){ 
+  #if avg is NA or 0
+  if(is.na(meta.can.var.prov.daily.full$avgtotal_mod[i]) | meta.can.var.prov.daily.full$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(meta.can.var.prov.daily.full$total[i])){
+      meta.can.var.prov.daily.full$avgtotal_mod[i]<-meta.can.var.prov.daily.full$total[i]
+    }
+  }
+}
+
+### PROP NOT FOUND
+# meta.can.var.prov.daily.full<-meta.can.var.prov.daily.full %>% 
+#   mutate(avgVOC_cases = prop * avgtotal_cases)
+
+meta.can.var.prov.daily.full<-meta.can.var.prov.daily.full %>% filter(!var.WHO %in% c("Theta","Lambda","GH/490R"))
+meta.can.var.prov.daily.full$var.WHO<-factor(meta.can.var.prov.daily.full$var.WHO,levels=var.ord.red)
+
+meta.can.var.prov.daily.full$division<-factor(meta.can.var.prov.daily.full$division,
+                                              levels=ord.prov.res)
+
+## by division, PLOT average daily sequences by VOC and province
+plot.daily.ave.seqs.voc.prov<-meta.can.var.prov.daily.full%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="top",
+        plot.margin=margin(3,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=division,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  facet_wrap(~division, scales="free_y")+
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.5,keyheight = 0.5, title="Variant",nrow = 2))
+
+plot.daily.ave.seqs.voc.prov
+ggsave(paste(f.out,"/CanAverageDailySequencesByVOC-ByProv.png",sep=""), height=4,width=8.5,units="in")
+
+## by prov, facetted by voc
+# meta.can.var.prov.daily.full$var.WHO<-factor(meta.can.var.prov.daily.full$var.WHO, levels=var.ord)
+meta.can.var.prov.daily.full.no0<-meta.can.var.prov.daily.full
+meta.can.var.prov.daily.full.no0$avgtotal_mod[which(meta.can.var.prov.daily.full.no0$avgtotal_mod==0)]<-NA
+meta.can.var.prov.daily.full.no0$division<-factor(meta.can.var.prov.daily.full.no0$division,levels=ord.prov.res)
+plot.daily.ave.seqs.prov.voc<-meta.can.var.prov.daily.full.no0%>%
+  # filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="top",
+        axis.text.x=element_text(size=rel(0.7)),
+        legend.margin = margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(3,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=division,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  ProvFillScale2+
+  # scaleDateBusy<-
+  scaleDateFlex+
+  facet_wrap(~var.WHO,nrow=3, scales="free")+
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.5,keyheight = 0.5, title="Province",nrow = 2))
+
+plot.daily.ave.seqs.prov.voc
+ggsave(paste(f.out,"/CanAverageDailySequencesByProv-ByVOC.png",sep=""), height=4,width=8.5,units="in")
+
+##CHECK FOR DUPZ
+temp<-meta.can.var.prov.daily %>%
+  unite(col="temp",1:3,remove = F)
+dupz<-which(duplicated(temp$temp)); length(dupz)
+```
+
+## Plot average daily proportion VOC sequences available by province
+```{r}
+#calculate the proportions
+# meta.can.var.prov.daily.full22<-meta.can.var.prov.daily.full
+
+#make a summary df for totals for each var.WHO in each day
+meta.can.var.prov.daily.full22.total<-meta.can.var.prov.daily.full %>% 
+  dplyr::group_by(var.WHO, date) %>% 
+  dplyr::summarize(.groups="rowwise",total.day=sum(avgtotal_mod))
+
+#bind this new column on to other df
+meta.can.var.prov.daily.full22 <- left_join(meta.can.var.prov.daily.full,
+                                           meta.can.var.prov.daily.full22.total,
+                                           by=c("date","var.WHO"))
+  
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.can.var.prov.daily.full22<-meta.can.var.prov.daily.full22 %>% mutate(prop=avgtotal_mod/total.day)
+  
+#replace NA and inf with 0
+meta.can.var.prov.daily.full22$prop<-na.replace(meta.can.var.prov.daily.full22$prop,0)
+meta.can.var.prov.daily.full22$var.WHO<-factor(meta.can.var.prov.daily.full22$var.WHO,levels=var.ord.red)
+meta.can.var.prov.daily.full22$division<-factor(meta.can.var.prov.daily.full22$division,levels=ord.prov)
+
+#plot the proportional VOC contribs for each province
+plot.proportion.byprov.VOC<-meta.can.var.prov.daily.full22 %>% 
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=date,y=prop,fill=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  ProvFillScale+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateFlex+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.proportion.byprov.VOC 
+ggsave(paste(f.out,"/CanAverageDailySequencesByProv_byVOC_proportion.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Plot average daily proportion prov by VOC 
+```{r}
+#calculate the proportions
+# meta.can.var.prov.daily.full2<-meta.can.var.prov.daily.full
+
+#make a summary df for totals in each division in each day
+meta.can.var.prov.daily.full2.total<-meta.can.var.prov.daily.full %>% 
+  dplyr::group_by(division, date) %>% 
+  dplyr::summarize(.groups="rowwise",total.day=sum(avgtotal_mod))
+
+#bind this new column on to other df
+meta.can.var.prov.daily.full2 <- left_join(meta.can.var.prov.daily.full,
+                                           meta.can.var.prov.daily.full2.total,
+                                           by=c("date","division"))
+  
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.can.var.prov.daily.full2<-meta.can.var.prov.daily.full2 %>% mutate(prop=avgtotal_mod/total.day)
+  
+#replace NA and inf with 0
+meta.can.var.prov.daily.full2$prop<-na.replace(meta.can.var.prov.daily.full2$prop,0)
+meta.can.var.prov.daily.full2$var.WHO<-factor(meta.can.var.prov.daily.full2$var.WHO,levels=var.ord)
+meta.can.var.prov.daily.full2$division<-factor(meta.can.var.prov.daily.full2$division,levels=ord.prov)
+
+# which(meta.can.var.prov.daily.full2$prop==NA)
+# which(is.na(meta.can.var.prov.daily.full2$prop))
+
+#check
+# sum(meta.can.var.prov.daily.full2$prop[meta.can.var.prov.daily.full2$date==as.Date("2020-04-01") & meta.can.var.prov.daily.full2$division=="Ontario"],na.rm=T)
+
+
+#plot the proportional VOC contribs for each province
+plot.proportion.VOC.byprov<-meta.can.var.prov.daily.full2 %>% 
+  ggplot( aes(x=date,y=prop,fill=var.WHO))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  VarFillScale+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~division)
+
+plot.proportion.VOC.byprov
+ggsave(paste(f.out,"/AverageDailySequencesByVOC_Provinces_proportion.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Impute the variant cases by province
+```{r}
+#Impute variant cases by leftjoining daily voc frqs and daily case counts
+# head(meta.can.var.daily.full2)
+#daily average cases by province
+# head(prov$avgtotal_mod)
+
+#reduce can data
+prov.red<-prov[,c("date","prname","avgtotal_mod")]
+colnames(prov.red)<-c("date","division","avgtotal_cases")
+prov.red<-prov.red %>% filter(division %in% ord.prov.res)
+#plot distrib of avgtotal_cases by province
+plot.can.new.diag.prov<-prov.red %>%
+  ggplot()+
+  labs(x=NULL, y="Average new diagnoses")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        # legend.text=element_text(size=rel(0.8)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_cases,group=division,fill=division),stat="identity",width=1)+
+  scaleDateBusy+
+  ProvFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  facet_wrap(~division, scales="free_y")
+plot.can.new.diag.prov
+ggsave(paste(f.out,"/AverageDailyCases_FacetProvinces.png",sep=""), height=4,width=8.5,units="in")
+
+## JOIN THE datasets
+meta.can.var.prov.daily.full3<-left_join(meta.can.var.prov.daily.full2, prov.red, by=c("date","division"))
+
+#replace NAs with zeroes
+meta.can.var.prov.daily.full3$avgtotal_cases<-na.replace(meta.can.var.prov.daily.full3$avgtotal_cases, 0)
+# head(meta.can.var.prov.daily.full3)
+
+#for days where the sum of prop is zero (no sequences), but cases>0, use the previous non zero proportion
+for (i in 1:length(alldivs)){
+  mydiv<-alldivs[i]
+  mydf<-meta.can.var.prov.daily.full3[which(meta.can.var.prov.daily.full3$division==mydiv),]
+  for (j in 1:length(alldays)){
+    #if proportions sum to zero, but cases >0, then need to pull prev props from non zero day
+    if(sum(mydf$prop[mydf$date==alldays[j]],na.rm=T)==0 &
+       sum(mydf$avgtotal_cases[mydf$date==alldays[j]],na.rm=T)>0 ){
+      #find the most recent non-zero prop day (in the past)
+      k=1
+      while(sum(mydf$prop[mydf$date==alldays[j-k]],na.rm=T)==0){
+        k<-k+1
+      }
+      #alldays[j-k]
+      #now replace it in the original df
+      meta.can.var.prov.daily.full3$prop[which(meta.can.var.prov.daily.full3$division==mydiv &
+                                                 meta.can.var.prov.daily.full3$date==alldays[j])] <-mydf$prop[mydf$date==alldays[j-k]]
+    } #end of loop for sum to zero, but cases >0
+  } #end of alldays loop
+} #divs loop
+
+#compute the avgVOC_cases
+meta.can.var.prov.daily.full3<-meta.can.var.prov.daily.full3 %>% mutate(avgVOC_cases = prop * avgtotal_cases)
+meta.can.var.prov.daily.full3$division<-factor(meta.can.var.prov.daily.full3$division, levels=ord.prov)
+
+#TEST
+# temp<-meta.can.var.prov.daily.full3 %>%
+#   unite(col="temp",1:3,remove = F)
+# dupz<-which(duplicated(temp$temp));length(dupz)
+
+#Plot the avgVOC_cases by var.WHO for all of Canada
+plot.daily.ave.voc.cases.prov<-meta.can.var.prov.daily.full3%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        legend.text=element_text(size=rel(0.6)),
+        legend.title = element_text(size=rel(0.8)),
+        legend.margin = margin(2,2,2,2,unit="pt"),
+        plot.margin=margin(3,1,1,1,unit="pt"))+
+    geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.7,keyheight = 0.7, title="Variant"))+
+  facet_wrap(~division, scales="free_y")
+plot.daily.ave.voc.cases.prov
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_Provinces.png",sep=""), height=4,width=8.5,units="in")
+
+#write the object 
+write.csv(meta.can.var.prov.daily.full3,paste(f.out,"/meta.can.var.prov.daily.full3.csv",sep=""))
+# meta.can.var.prov.daily.full3<-read.csv(paste(f.out,"/meta.can.var.prov.daily.full3.csv",sep=""))
+
+#plot the filled in proportions as above
+
+#plot the proportional VOC contribs for each province
+plot.proportion.VOC.byprov.full<-meta.can.var.prov.daily.full3 %>% 
+  ggplot( aes(x=date,y=prop,fill=var.WHO))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  VarFillScale+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~division, scales="free_y")
+
+plot.proportion.VOC.byprov.full
+ggsave(paste(f.out,"/AverageDailySequencesByVOC_Provinces_proportion_full.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Plot as above, facetted by VOC, colored by province
+```{r}
+meta.can.var.prov.daily.full3.no0<-meta.can.var.prov.daily.full3
+meta.can.var.prov.daily.full3.no0$avgVOC_cases[which(meta.can.var.prov.daily.full3.no0$avgVOC_cases==0)]<-NA
+meta.can.var.prov.daily.full3.no0<-meta.can.var.prov.daily.full3.no0[-which(is.na(meta.can.var.prov.daily.full3.no0$avgVOC_cases)),]
+meta.can.var.prov.daily.full3.no0<-meta.can.var.prov.daily.full3.no0[-which(meta.can.var.prov.daily.full3.no0$avgVOC_cases<0.5),]
+#Plot the avgVOC_cases by var.WHO for all of Canada
+meta.can.var.prov.daily.full3.no0$date<-as.Date(meta.can.var.prov.daily.full3.no0$date)
+meta.can.var.prov.daily.full3.no0$division<-factor(meta.can.var.prov.daily.full3.no0$division,levels=ord.prov.res)
+plot.daily.ave.prov.cases.voc<-meta.can.var.prov.daily.full3.no0%>%
+  # filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province"))+
+  facet_wrap(~var.WHO, scales="free",nrow=3)
+
+plot.daily.ave.prov.cases.voc
+ggsave(paste(f.out,"/AverageDailyProvCases_ByVOC.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Plot each variant: cases over time in Canada
+```{r}
+#make a separate plot for delta 
+y.lim<-c(0,4500)
+plot.daily.ave.prov.cases.delta<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Delta")) %>%
+  ggplot()+
+  annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Delta cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.delta
+ggsave(paste(f.out,"/AverageDailyProvCases_Delta.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Alpha only
+y.lim<-c(0,4500)
+plot.daily.ave.prov.cases.Alpha<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Alpha")) %>%
+  ggplot()+
+  annotate(geom="rect",xmin = as.Date("2020-12-24"), xmax = as.Date("2021-01-06"),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Alpha cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Alpha
+ggsave(paste(f.out,"/AverageDailyProvCases_Alpha.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Gamma only
+y.lim<-c(0,2500)
+plot.daily.ave.prov.cases.Gamma<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Gamma")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Gamma cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Gamma
+ggsave(paste(f.out,"/AverageDailyProvCases_Gamma.png",sep=""), height=4,width=5,units="in")
+
+#make a separate plot for Beta only
+y.lim<-c(0,450)
+plot.daily.ave.prov.cases.Beta<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Beta")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Beta cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Beta
+ggsave(paste(f.out,"/AverageDailyProvCases_Beta.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for BA.1 only
+y.lim<-c(0,21000)
+plot.daily.ave.prov.cases.BA.1<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("BA.1")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily BA.1 cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.BA.1
+ggsave(paste(f.out,"/AverageDailyProvCases_BA.1.png",sep=""), height=4,width=5,units="in")
+
+
+
+#make a separate plot for BA.1.1 only
+y.lim<-c(0,21000)
+plot.daily.ave.prov.cases.BA.1.1<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("BA.1.1")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily BA.1.1 cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.BA.1.1
+ggsave(paste(f.out,"/AverageDailyProvCases_BA.1.1.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for BA.2 only
+y.lim<-c(0,2000)
+plot.daily.ave.prov.cases.BA.2<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("BA.2")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily BA.2 cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.BA.2
+ggsave(paste(f.out,"/AverageDailyProvCases_BA.2.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Iota only
+y.lim<-c(0,500)
+plot.daily.ave.prov.cases.Iota<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Iota")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Iota cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Iota
+ggsave(paste(f.out,"/AverageDailyProvCases_Iota.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Zeta only
+y.lim<-c(0,300)
+plot.daily.ave.prov.cases.Zeta<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Zeta")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Zeta cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Zeta
+ggsave(paste(f.out,"/AverageDailyProvCases_Zeta.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Kappa only
+y.lim<-c(0,110)
+plot.daily.ave.prov.cases.Kappa<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Kappa")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Kappa cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Kappa
+ggsave(paste(f.out,"/AverageDailyProvCases_Kappa.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Epsilon only
+y.lim<-c(0,200)
+plot.daily.ave.prov.cases.Epsilon<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Epsilon")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Epsilon cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Epsilon
+ggsave(paste(f.out,"/AverageDailyProvCases_Epsilon.png",sep=""), height=4,width=5,units="in")
+
+
+#make a separate plot for Mu only
+y.lim<-c(0,20)
+plot.daily.ave.prov.cases.Mu<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Mu")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Mu cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Mu
+ggsave(paste(f.out,"/AverageDailyProvCases_Mu.png",sep=""), height=4,width=5,units="in")
+
+## FOR ETA
+
+#make a separate plot for Eta only
+y.lim<-c(0,400)
+plot.daily.ave.prov.cases.Eta<-meta.can.var.prov.daily.full3.no0%>%
+  filter(var.WHO %in% c("Eta")) %>%
+  ggplot()+
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #            ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.8)),
+        legend.position="top",
+        legend.margin=margin(1,1,1,1,unit="pt"),
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=division),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated daily Eta cases")+
+  scale_y_continuous(expand=c(0,0))+
+  ProvFillScale2+
+  scaleDateFlex+ 
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.6,keyheight = 0.6, title="Province",nrow=3))+
+  coord_cartesian(ylim=y.lim)
+
+plot.daily.ave.prov.cases.Eta
+ggsave(paste(f.out,"/AverageDailyProvCases_Eta.png",sep=""), height=4,width=5,units="in")
+
+```
+
+## PRINT OUT THE CUMULATIVE NUMBER OF estimated cases in each VAR
+```{r}
+total.cases.byvar<-meta.can.var.prov.daily.full3%>%
+  group_by(var.WHO) %>% summarize(totalavgcases=sum(avgVOC_cases,na.rm=T)) %>% as.data.frame()
+
+total.seqs.byvar<-meta.can %>% group_by(var.WHO) %>%
+  count() %>% as.data.frame()
+
+total.cases.seqs.byvar<-left_join(total.cases.byvar, total.seqs.byvar, by="var.WHO")
+total.cases.seqs.byvar$totalavgcases<-round(total.cases.seqs.byvar$totalavgcases, digits=0)
+total.cases.seqs.byvar<-total.cases.seqs.byvar%>% mutate(seq.prop=n/totalavgcases)
+total.cases.seqs.byvar$seq.prop<-total.cases.seqs.byvar$seq.prop %>% round(digits=3)
+colnames(total.cases.seqs.byvar)<-c("Variant","Estimated.cases","Clean sequences available","Sequence per case")
+# levels(meta.can.var.daily.full3$var.WHO)
+
+write.csv(total.cases.seqs.byvar,paste0(f.out,"/total.cases.seqs.byvar.csv"))
+```
+
+
+## plot the daily proportion of each province's contribution to each VOC
+```{r}
+#similar to before, make a summary total for each date and VOC
+meta.can.var.prov.daily.full.p.total<-meta.can.var.prov.daily.full3 %>% 
+  dplyr::group_by(var.WHO, date) %>% 
+  dplyr::summarize(.groups="rowwise",totalVOC_cases=sum(avgVOC_cases))
+
+#bind it to a duplicate of the df
+meta.can.var.prov.daily.full.p <- left_join(meta.can.var.prov.daily.full3,
+                                           meta.can.var.prov.daily.full.p.total,
+                                           by=c("date","var.WHO"))
+ 
+#mutate a proportion
+meta.can.var.prov.daily.full.p<-meta.can.var.prov.daily.full.p %>% mutate(prop=avgVOC_cases/totalVOC_cases)
+meta.can.var.prov.daily.full.p$prop<-na.replace(meta.can.var.prov.daily.full.p$prop,0)
+meta.can.var.prov.daily.full.p$var.WHO<-factor(meta.can.var.prov.daily.full.p$var.WHO,levels=var.ord)
+meta.can.var.prov.daily.full.p$division<-factor(meta.can.var.prov.daily.full.p$division,levels=ord.prov)
+
+#plot the proportional prov contribs for each VOC
+plot.proportion.prov.byVOC<-meta.can.var.prov.daily.full.p %>% 
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=date,y=prop,fill=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  ProvFillScale2+
+  labs(y="Proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.proportion.prov.byVOC
+ggsave(paste(f.out,"/AverageDailyVOCcasesByProv_VOCs_proportion.png",sep=""), height=4,width=8.5,units="in")
+
+```
+
+## Plot daily average variant seq representation by province
+```{r}
+meta.can.var.prov.daily.full4<-meta.can.var.prov.daily.full3.no0
+
+meta.can.var.prov.daily.full4<-meta.can.var.prov.daily.full4 %>%
+  mutate(VOCseq_percase = avgtotal_mod / avgVOC_cases)
+
+#plot this over time by division and by VOC
+plot.daily.VOCseqrep.byprov<-meta.can.var.prov.daily.full4 %>%
+  filter(date>as.Date(start.date)) %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_line(aes(x=date,y=VOCseq_percase,color=division),alpha=0.7)+
+  # scaleDateBusy+
+  ProvColScale+
+  theme(legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3, scales="free")+
+  labs(x=NULL,y="Sequence per case")+
+  pubThemeDate+
+  scaleDateFlex
+  # scale_y_continuous(limits=c(0,2))
+
+plot.daily.VOCseqrep.byprov
+ggsave(paste(f.out,"/AverageDailySequenceRep.byProv.byVOC.png",sep=""),height=4, width=8.5, units="in")  
+
+```
+
+## Plot monthly average variant seq representation by province
+```{r}
+#Add a month column
+alldays<-seq(ymd(first(sort(prov$date))),
+    ymd(last(sort(prov$date))),
+    by='1 day')
+month.df<-data.frame(date=alldays, month=NA)
+month.df$date<-as.Date(month.df$date)
+month.df$month<-format(month.df$date, "%Y-%m")
+
+#bindit on
+meta.can.var.prov.daily.full3$date<-as.Date(meta.can.var.prov.daily.full3$date)
+meta.can.var.prov.daily.full33<-meta.can.var.prov.daily.full3 %>% left_join(month.df, by="date")
+
+#HCEKC
+# meta.can.var.prov.daily.full3 %>% dplyr::group_by(var.WHO, division, date)
+# meta.can.var.prov.daily.full3<-meta.can.var.prov.daily.full3 %>% unite("temp",1:3)
+# which(duplicated(meta.can.var.prov.daily.full3$temp))
+
+#group by month and sum cases, seqs
+meta.can.var.prov.daily.full.month<-meta.can.var.prov.daily.full33 %>%
+  group_by(division, var.WHO, month) %>%
+  dplyr::summarise(.groups="rowwise",
+                   totalVOCcases=sum(avgVOC_cases,na.rm=T),
+                   totalVOCseqs=sum(avgtotal_mod,na.rm=T))
+
+## CHECK
+sub<-which(meta.can.var.prov.daily.full33$division=="Ontario" & meta.can.var.prov.daily.full33$var.WHO=="Alpha")
+sub<-meta.can.var.prov.daily.full33[sub,]
+sub1<-which(meta.can.var.prov.daily.full.month$division=="Ontario" & meta.can.var.prov.daily.full.month$var.WHO=="Alpha")
+meta.can.var.prov.daily.full.month[sub1[1:20],]
+ # 2021-05       40320.
+monthly.cases.prov<-as.data.frame(prov %>% dplyr::group_by(prname, month) %>% 
+                                    dplyr::summarize(.groups="rowwise", n.cases=sum(avgtotal_mod) ))
+monthly.cases.prov[monthly.cases.prov$prname=="Ontario" & monthly.cases.prov$month=="2021-05",]
+# 75993 #okay so this is actually the real number... wtf
+
+#Test
+# temp<-sub%>% 
+#   unite(col="temp",1:3,remove = F)
+# dupz<-which(duplicated(temp$temp));length(dupz)
+
+#calculate seq per case for each month
+meta.can.var.prov.daily.full.month<-meta.can.var.prov.daily.full.month %>% mutate(seq_per_case = totalVOCseqs/ totalVOCcases)
+
+#plot totalVOCcases vs totalVOCseqs
+plot.seq.vs.case.per.month.div.voc<-
+meta.can.var.prov.daily.full.month %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_point(aes(x=totalVOCcases,y=totalVOCseqs,color=division))+
+        geom_smooth(aes(x=(totalVOCcases), y=(totalVOCseqs)),method="glm",se=T,formula=y~x,lwd=0.2,alpha=0.3)+
+  ProvColScale2+
+  pubTheme+
+  theme(legend.position="top",
+        legend.margin=margin(1,1,1,1,"pt"))+
+  labs(x="Monthly estimated cases",y="Monthly sequences available")+
+  facet_wrap(~var.WHO,nrow=3,scales="free")
+plot.seq.vs.case.per.month.div.voc
+ggsave(paste(f.out,"/monthly.seq_per_case.byProv.byVOC.png",sep=""),width=8.5, height=4, units="in")  
+## as above, log scale
+plot.seq.vs.case.per.month.div.voc.log<-
+meta.can.var.prov.daily.full.month %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_point(aes(x=log10(totalVOCcases),y=log10(totalVOCseqs),color=division))+
+      geom_smooth(aes(x=log10(totalVOCcases), y=log10(totalVOCseqs)),method="glm",se=T,formula=y~x,lwd=0.2,alpha=0.3)+
+  ProvColScale2+
+  pubTheme+
+  theme(legend.position="top",
+        legend.margin=margin(1,1,1,1,"pt"))+
+  labs(x="log10 Monthly estimated cases",y="log10 Monthly sequences available")+
+  facet_wrap(~var.WHO,nrow=3,scales="free")
+plot.seq.vs.case.per.month.div.voc.log
+ggsave(paste(f.out,"/monthly.seq_per_case.byProv.byVOC.log.png",sep=""),height=4, width=8.5, units="in")  
+```
+
+## Calculate corr. coef and R^2 from linear model fits and add to plots of seqs vs cases
+```{r}
+#calculate for each VOC
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month.temp[
+  -which(meta.can.var.prov.daily.full.month.temp$totalVOCcases==0),
+]
+df.temp<-meta.can.var.prov.daily.full.month.temp %>% group_by(var.WHO) %>%
+    summarize(pearson=round(cor(x=totalVOCcases,y=totalVOCseqs,method="pearson"),digits = 2),
+          spearman=round(cor(x=totalVOCcases,y=totalVOCseqs,method="spearman"),digits = 2),
+          adj.r2=round(summary(lm(totalVOCseqs~totalVOCcases))$adj.r.squared,digits = 2),
+          y.int=round(lm(totalVOCseqs~totalVOCcases)$coefficients[1],digits = 2),
+          slope=round(lm(totalVOCseqs~totalVOCcases)$coefficients[2],digits = 2))
+#add to the plot by Var.WHO
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month %>% 
+  left_join(df.temp, by="var.WHO")
+
+#add a position for the annotation into the df
+meta.can.var.prov.daily.full.month.temp <- meta.can.var.prov.daily.full.month.temp%>%
+  left_join(meta.can.var.prov.daily.full.month.temp %>% group_by(var.WHO) %>%
+  summarize(xpos=min(totalVOCcases,na.rm=T)+2, ypos=max(totalVOCseqs,na.rm=T)),
+  by="var.WHO")
+
+#check
+meta.can.var.prov.daily.full.month.temp %>% group_by(division) %>% summarize(totalSEQS=sum(totalVOCseqs,na.rm=T))
+
+
+plot.seq.vs.case.per.month.div.voc.cor<-
+meta.can.var.prov.daily.full.month.temp %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot(group=var.WHO)+
+  geom_point(aes(x=totalVOCcases,y=totalVOCseqs,color=division),alpha=0.8)+
+  ProvColScale2+
+  pubTheme+
+ theme(legend.position="top",legend.margin=margin(1,1,1,1,"pt"),
+        legend.text=element_text(size=rel(0.7)),
+        legend.title=element_text(size=rel(0.8)),
+        axis.text.y=element_text(size=rel(0.7)),
+        axis.text.x=element_text(size=rel(0.6),angle=45,hjust=1,vjust=1))+
+  labs(x="Monthly estimated cases",y="Monthly sequences available")+
+  # geom_text(aes(label=as.character(pearson),x=1,y=1))+
+  geom_text(aes(label=paste("r =",pearson,sep=" " ),
+                x=xpos,y=ypos,group=var.WHO),size=rel(2.5),hjust=0,vjust=2)+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  scale_y_continuous(expand=c(0.1,0))
+plot.seq.vs.case.per.month.div.voc.cor
+ggsave(paste(f.out,"/monthly.seq_per_case.byProv.byVOC.cor.png",sep=""),width=8.5, height=4, units="in")  
+
+## Make a version for the supplementary
+plot_grid(plot.seq.vs.case.per.month.div.voc.cor,labels="A")
+ggsave(paste(f.out,"/monthly.seq_per_case.byProv.byVOC.cor.A.png",sep=""),width=8.5, height=5.3, units="in")  
+
+## export table of correlations
+write.csv(df.temp, paste(f.out,"corr.case.vs.seq.Canada.pre-samp.csv",sep="/"))
+```
+
+
+## troubleshoot denom
+```{r}
+# meta.can.var.prov.daily.full.month
+# TEST
+# meta.can.var.prov.daily.full3
+# meta.can.var.prov.daily.full3
+# meta.can.var.prov.daily.full2
+
+## object being plotted: 
+temp<-meta.can.var.prov.daily.full22 %>% 
+  unite(col="temp",1:3,remove = F)
+dupz<-which(duplicated(temp$temp));length(dupz)
+
+#how many cases per month per variant?
+
+#does this match the panel A
+
+#where are things getting double counted?
+
+#see figure "...cor.A.png"
+```
+
+```{r}
+### REPEAT FOR THE LOG10 claculations
+# calculate for each VOC
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month
+#no zeroes allowed in the correlation calculation
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month.temp[
+  -which(meta.can.var.prov.daily.full.month.temp$totalVOCcases==0),]
+#no NAs
+# meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month.temp[
+#   -which(is.na(meta.can.var.prov.daily.full.month.temp$totalVOCcases)),]
+
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month.temp %>%
+  mutate(log10.totalVOCcases=log10(totalVOCcases),
+         log10.totalVOCseqs=log10(totalVOCseqs),)
+# which(is.na(meta.can.var.prov.daily.full.month.temp$log10.totalVOCcases))
+# which(is.na(meta.can.var.prov.daily.full.month.temp$log10.totalVOCseqs))
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month.temp[-
+which(meta.can.var.prov.daily.full.month.temp$log10.totalVOCseqs==-Inf |
+      meta.can.var.prov.daily.full.month.temp$log10.totalVOCcases==-Inf),]
+
+
+#summarize the corrs and lm fit
+df.temp<-meta.can.var.prov.daily.full.month.temp %>% group_by(var.WHO) %>%
+    summarize(pearson=round(cor(x=log10.totalVOCcases,y=log10.totalVOCseqs,method="pearson"),digits = 2),
+          spearman=round(cor(x=log10.totalVOCcases,y=log10.totalVOCseqs,method="spearman"),digits = 2),
+          adj.r2=round(summary(lm(log10.totalVOCseqs~log10.totalVOCcases))$adj.r.squared,digits = 2),
+          y.int=round(lm(log10.totalVOCseqs~log10.totalVOCcases)$coefficients[1],digits = 2),
+          slope=round(lm(log10.totalVOCseqs~log10.totalVOCcases)$coefficients[2],digits = 2))
+#add to the plot by Var.WHO
+meta.can.var.prov.daily.full.month.temp<-meta.can.var.prov.daily.full.month.temp %>% 
+  left_join(df.temp, by="var.WHO")
+
+#add a position for the annotation into the df
+meta.can.var.prov.daily.full.month.temp <- meta.can.var.prov.daily.full.month.temp%>%
+  left_join(meta.can.var.prov.daily.full.month.temp %>% group_by(var.WHO) %>%
+  summarize(xpos=0, ypos=max(log10.totalVOCseqs,na.rm=T)),
+  by="var.WHO")
+
+plot.seq.vs.case.per.month.div.voc.cor.log<-
+meta.can.var.prov.daily.full.month.temp %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot(group=var.WHO)+
+  geom_point(aes(x=log10.totalVOCcases,y=log10.totalVOCseqs,color=division),alpha=0.8)+
+  ProvColScale2+
+  pubTheme+
+  theme(legend.position="top",
+        legend.margin=margin(1,1,1,1,"pt"))+
+  labs(x="log10 Monthly estimated cases",y="log10 Monthly sequences available")+
+  geom_text(aes(label=paste("r =",pearson,sep=" " ),
+                x=xpos,y=ypos,group=var.WHO),size=rel(2.5),hjust=0,vjust=2)+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  scale_y_continuous(expand=c(0.1,0))
+plot.seq.vs.case.per.month.div.voc.cor.log
+ggsave(paste(f.out,"/monthly.seq_per_case.byProv.byVOC.log10.png",sep=""),width=8.5, height=4, units="in")  
+
+write.csv(df.temp, paste(f.out,"corr.case.vs.seq.Canada.pre-samp.log10.csv",sep="/"))
+```
+
+## plot seq per case over time (by month), facetted by VOC 
+```{r}
+meta.can.var.prov.daily.full.month.no0<-meta.can.var.prov.daily.full.month
+meta.can.var.prov.daily.full.month.no0$seq_per_case<-meta.can.var.prov.daily.full.month.no0$seq_per_case[which(meta.can.var.prov.daily.full.month.no0$seq_per_case==0)]<-NA
+meta.can.var.prov.daily.full.month.no0<-meta.can.var.prov.daily.full.month.no0[-which(is.na(meta.can.var.prov.daily.full.month.no0$seq_per_case)),]
+meta.can.var.prov.daily.full.month.no0<-meta.can.var.prov.daily.full.month.no0[-which(meta.can.var.prov.daily.full.month.no0$seq_per_case<0.001),]
+
+#custom date label
+meta.can.var.prov.daily.full.month$month2<-as.Date(paste0(meta.can.var.prov.daily.full.month$month,"-01"))
+
+plot.daily.VOCseqrep.byprov<-meta.can.var.prov.daily.full.month %>%
+  filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_point(aes(x=month2,y=seq_per_case,group=var.WHO,color=division),size=1,alpha=0.8)+
+  scaleDateFlex+
+  ProvColScale2+
+  labs(x=NULL,y="Sequence per case")+
+  theme(legend.position = "top")+
+  facet_wrap(~var.WHO,nrow=3, scales="free_y")+
+  pubThemeDate
+
+plot.daily.VOCseqrep.byprov
+ggsave(paste(f.out,"/AverageMonthlyVOCSequenceRep.byProv.png",sep=""),width=8.5, height=4, units="in")  
+
+```
+
+## Calculate the monthly proportion of provs' contributions to estimated variant cases
+```{r}
+## Start with daily estimates of voc-spec cases for each province
+## bin by month and sum
+meta.can.var.prov.daily.full.pm<-meta.can.var.prov.daily.full33 %>% 
+  group_by(var.WHO,division,month) %>%
+  summarize(.groups="rowwise", monthly_VOC_cases=sum(avgVOC_cases,na.rm=T))
+
+## calculate totals for denominator
+meta.can.var.prov.daily.full.pm.total<-meta.can.var.prov.daily.full.pm %>% 
+  dplyr::group_by(var.WHO, month) %>% 
+  dplyr::summarize(.groups="rowwise",total_monthly_VOC_cases=sum(monthly_VOC_cases))
+
+#bind it to a duplicate of the df
+meta.can.var.prov.daily.full.pm <- left_join(meta.can.var.prov.daily.full.pm,
+                                           meta.can.var.prov.daily.full.pm.total,
+                                           by=c("month","var.WHO"))
+ 
+#mutate a proportion
+meta.can.var.prov.daily.full.pm<-meta.can.var.prov.daily.full.pm %>% mutate(prop=monthly_VOC_cases/total_monthly_VOC_cases)
+meta.can.var.prov.daily.full.pm$prop<-na.replace(meta.can.var.prov.daily.full.pm$prop,0)
+meta.can.var.prov.daily.full.pm$var.WHO<-factor(meta.can.var.prov.daily.full.pm$var.WHO,levels=var.ord)
+meta.can.var.prov.daily.full.pm$division<-factor(meta.can.var.prov.daily.full.pm$division,levels=ord.prov)
+
+
+#turn zeroes into NA
+meta.can.var.prov.daily.full.pm.no0<-meta.can.var.prov.daily.full.pm
+meta.can.var.prov.daily.full.pm.no0$prop[which(meta.can.var.prov.daily.full.pm.no0$prop==0)]<-NA
+#plot the proportional prov contribs for each VOC
+plot.monthly.proportion.prov.byVOC<-meta.can.var.prov.daily.full.pm %>% 
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=prop,fill=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  ProvFillScale2+
+  labs(y="Monthly proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  scaleMonthChar+
+  scale_y_continuous(expand=c(0,0))+
+  theme(legend.position = "top",
+        legend.margin=margin(1,1,1,1,"pt"))+
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.7,keyheight = 0.7, title="Province"))+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.monthly.proportion.prov.byVOC
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesByProv_VOCs_proportion.png",sep=""), height=4,width=8.5,units="in")
+
+#try as a density linked plot
+meta.can.var.prov.daily.full.pm<-meta.can.var.prov.daily.full.pm %>%
+  filter(!is.na(month)) %>%
+  mutate(date.smooth=as.Date(paste(month,"-01",sep="")))
+
+plot.monthly.proportion.prov.byVOC.2<-meta.can.var.prov.daily.full.pm %>%
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot(aes(x=month,y=prop,group=division,fill=division))+
+  geom_density(position="stack",stat="identity",lwd=0)+
+  ProvFillScale2+
+  labs(y="Monthly proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  scaleMonthChar+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.monthly.proportion.prov.byVOC.2
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesByProv_VOCs_proportion_density.png",sep=""), height=4,width=8.5,units="in")
+
+#plot counts
+#plot the proportional country contribs for each VOC
+# meta.can.var.prov.daily.full.pm.no<-meta.can.var.prov.daily.full.pm
+# removers<-which(meta.can.var.prov.daily.full.pm.no$monthly_VOC_cases==0|
+#                   meta.can.var.prov.daily.full.pm.no$monthly_VOC_cases<0.5|
+#                   is.na(meta.can.var.prov.daily.full.pm.no$monthly_VOC_cases))
+# if(length(removers)>0){meta.can.var.prov.daily.full.pm.no<-meta.can.var.prov.daily.full.pm.no[-removers,]}
+plot.monthly.prov.byVOC.2<-meta.can.var.prov.daily.full.pm %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=monthly_VOC_cases,fill=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  ProvFillScale2+
+  labs(y="Monthly estimated cases",x=NULL)+
+  pubThemeDate+
+  # scaleDateFlex+
+  scaleMonthChar+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme(legend.position = "top",
+        legend.margin=margin(1,1,1,1,"pt"))+
+  guides(fill=guide_legend(title.position = "left",keywidth = 0.7,keyheight = 0.7, title="Province"))+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")
+
+plot.monthly.prov.byVOC.2
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesByProv_VOCs_counts.png",sep=""), height=4,width=8.5,units="in")
+
+## export these values
+write.csv(meta.can.var.prov.daily.full.pm, paste(f.out,"/AverageMonthlyVOCcasesByProv.csv",sep=""))
+# meta.can.var.prov.daily.full.pm<-read.csv(paste(f.out,"/AverageMonthlyVOCcasesByProv.csv",sep=""))
+
+```
+
+## Calculate the monthly proportion of provs' contributions to VOC sequences
+```{r}
+#calculate the proportions
+meta.can.var.prov.daily.full22m<-meta.can.var.prov.daily.full 
+#add on months
+meta.can.var.prov.daily.full22m<-meta.can.var.prov.daily.full22m %>%left_join(month.df, by="date")
+#tally by months
+meta.can.var.prov.daily.full22m<-meta.can.var.prov.daily.full22m%>% 
+  group_by(var.WHO,division, month) %>%
+  summarize(.groups="rowwise", monthly_VOC_seqs=sum(avgtotal_mod,na.rm=T))
+
+#make a summary df for totals for each var.WHO in each day
+meta.can.var.prov.daily.full22m.total<-meta.can.var.prov.daily.full22m %>% 
+  dplyr::group_by(var.WHO, month) %>% 
+  dplyr::summarize(.groups="rowwise",total_monthly_VOC_seqs=sum(monthly_VOC_seqs))
+
+#bind this new column on to other df
+meta.can.var.prov.daily.full22m <- left_join(meta.can.var.prov.daily.full22m,
+                                           meta.can.var.prov.daily.full22m.total,
+                                           by=c("month","var.WHO"))
+  
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.can.var.prov.daily.full22m<-meta.can.var.prov.daily.full22m %>% mutate(prop=monthly_VOC_seqs/total_monthly_VOC_seqs)
+  
+#replace NA and inf with 0
+meta.can.var.prov.daily.full22m$prop<-na.replace(meta.can.var.prov.daily.full22m$prop,0)
+meta.can.var.prov.daily.full22m$var.WHO<-factor(meta.can.var.prov.daily.full22m$var.WHO,levels=var.ord)
+meta.can.var.prov.daily.full22m$division<-factor(meta.can.var.prov.daily.full22m$division,levels=ord.prov)
+
+#plot the proportional VOC contribs for each province
+plot.monthly.proportion.byprov.VOC<-meta.can.var.prov.daily.full22m %>% 
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=month,y=prop,fill=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  ProvFillScale2+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scaleMonthChar+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.monthly.proportion.byprov.VOC
+ggsave(paste(f.out,"/CanAverageMonthlySequencesByProv_byVOC_proportion.png",sep=""), height=4,width=8.5,units="in")
+
+meta.can.var.prov.daily.full22m<-meta.can.var.prov.daily.full22m %>% mutate(date.smooth=as.Date(paste(month,"-01",sep="")))
+
+plot.monthly.proportion.byprov.VOC.2<-meta.can.var.prov.daily.full22m %>%
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%
+  ggplot( aes(x=date.smooth,y=prop,fill=division,group=division))+
+  geom_density(position="stack",stat="identity",lwd=0)+
+  ProvFillScale2+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.monthly.proportion.byprov.VOC.2
+ggsave(paste(f.out,"/CanAverageMonthlySequencesByProv_byVOC_proportion_density.png",sep=""), height=4,width=8.5,units="in")
+
+##counts
+meta.can.var.prov.daily.full22m.no0<-meta.can.var.prov.daily.full22m
+removers<-which(meta.can.var.prov.daily.full22m.no0$monthly_VOC_seqs==0 |
+                meta.can.var.prov.daily.full22m.no0$monthly_VOC_seqs<0.5 |
+                  is.na(meta.can.var.prov.daily.full22m.no0$monthly_VOC_seqs))
+if(length(removers)>0){
+  meta.can.var.prov.daily.full22m.no0<-meta.can.var.prov.daily.full22m.no0[-removers,]
+}
+plot.monthly.byprov.VOC.22<-meta.can.var.prov.daily.full22m %>% 
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=month,y=monthly_VOC_seqs,fill=division,group=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,width=1)+
+  ProvFillScale2+
+  labs(y="Monthly sequences available",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scaleMonthChar+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")
+
+plot.monthly.byprov.VOC.22
+ggsave(paste(f.out,"/CanAverageMonthlySequencesByProv_byVOC_count.png",sep=""), height=4,width=8.5,units="in")
+
+#count full x
+plot.monthly.byprov.VOC.22.fullx<-meta.can.var.prov.daily.full22m %>% 
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=month,y=monthly_VOC_seqs,fill=division,group=division))+
+  geom_bar(position="stack",stat="identity",lwd=0,width=1)+
+  ProvFillScale2+
+  labs(y="Monthly sequences available",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  scaleMonthChar
+
+plot.monthly.byprov.VOC.22.fullx
+ggsave(paste(f.out,"/CanAverageMonthlySequencesByProv_byVOC_count_fullx.png",sep=""), height=4,width=8.5,units="in")
+# count density
+
+
+plot.monthly.byprov.VOC.22.fullx.dens<-meta.can.var.prov.daily.full22m %>% 
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=date.smooth,y=monthly_VOC_seqs,fill=division,group=division))+
+  geom_density(position="stack",stat="identity",lwd=0,width=1)+
+  ProvFillScale2+
+  labs(y="Monthly sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")
+  # scaleMonthChar
+
+plot.monthly.byprov.VOC.22.fullx.dens
+ggsave(paste(f.out,"/CanAverageMonthlySequencesByProv_byVOC_count_fullx_dens.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Calculate and Plot monthly proportion of cases and seqs contributed by each province (all VOCs together)
+```{r}
+#summarize the rolling average by month and prov
+monthly.cases.prov<-as.data.frame(prov %>% dplyr::group_by(prname, month) %>% 
+                                    dplyr::summarize(.groups="rowwise", n.cases=sum(avgtotal_mod) ))
+
+#calculate the proportion of cases in a given month from each province 
+monthly.cases.prov$proportion.cases<-NA                                                                      
+for (i in 1:nrow(monthly.cases.prov)){
+  monthly.cases.prov$proportion.cases[i]<-monthly.cases.prov$n.cases[i]/sum(monthly.cases.prov$n.cases [monthly.cases.prov$month==monthly.cases.prov$month[i]])
+}
+
+#check the proportions of cases by prov sum to 1 in a given month
+# sum(monthly.cases.prov$proportion.cases[monthly.cases.prov$month=="2020-06"])
+
+#### Count total and proportion of sequences in Canada #####
+#Need to calculate number of seqs in each prov in each month
+monthly.seqs.prov<-meta.can%>%
+  dplyr::count(month,division) %>% #note this replaces group_by(a,b)%>%summarize(n=n())
+  as.data.frame() 
+colnames(monthly.seqs.prov)[3]<-"n.sequence"
+
+#remove any NA
+monthly.seqs.prov<-monthly.seqs.prov[-which(is.na(monthly.seqs.prov$month)),]
+
+#add a column for proportion of seqs that were in that prov compared to country
+monthly.seqs.prov$proportion.sequence<-NA
+for (i in 1:nrow(monthly.seqs.prov)){
+  monthly.seqs.prov$proportion.sequence[i]<-monthly.seqs.prov$n.sequence[i]/sum(monthly.seqs.prov$n.sequence [monthly.seqs.prov$month==monthly.seqs.prov$month[i]],na.rm = T)
+}
+#check
+# sum(monthly.seqs.prov$proportion.sequence[monthly.seqs.prov$month=="2021-06"])
+
+#check congruency
+colnames(monthly.cases.prov)[1]<-"division"
+#full match if zero
+monthly.seqs.prov$division[which(!monthly.seqs.prov$division %in% monthly.cases.prov$division)] 
+#provs with cases and no sequences in a given month
+# unique(monthly.cases.prov$division[which(!monthly.cases.prov$division %in% monthly.seqs.prov$division )] ) 
+
+#ensure classes match
+which (!monthly.seqs.prov$month %in% monthly.cases.prov$month) #full match if zero
+monthly.seqs.prov$month[which (!monthly.seqs.prov$month %in% monthly.cases.prov$month)]
+monthly.seqs.prov[which (!monthly.seqs.prov$month %in% monthly.cases.prov$month),]
+
+#do the join based on seqs (restricts to only provs with seqs)
+monthly.prov.cases.seq<-dplyr::left_join( monthly.seqs.prov, monthly.cases.prov,by=c("division","month") )
+
+# need to put in zero values for early months for all provs
+# table(monthly.prov.cases.seq$month,monthly.prov.cases.seq$division)
+monz<-sort(unique(monthly.prov.cases.seq$month))
+provz<-sort(unique(monthly.prov.cases.seq$division))
+
+#make an empty df with zero contribs for provs with no cases
+temp<-table(monthly.prov.cases.seq$month,monthly.prov.cases.seq$division) %>% as.data.frame()
+temp2<-temp[which(temp$Freq==0),]
+emptydf<-as.data.frame(monthly.prov.cases.seq[1:nrow(temp2),])
+emptydf[,c(1:3)]<-temp[which(temp$Freq==0),]
+emptydf[,c(4:ncol(emptydf))]<-0
+
+#add on 
+monthly.prov.cases.seq<-rbind(monthly.prov.cases.seq, emptydf)
+monthly.prov.cases.seq<-monthly.prov.cases.seq[with(monthly.prov.cases.seq,order(division)),]
+monthly.prov.cases.seq$n.cases<-as.numeric(monthly.prov.cases.seq$n.cases)
+monthly.prov.cases.seq$proportion.cases<-as.numeric(monthly.prov.cases.seq$proportion.cases)
+monthly.prov.cases.seq$n.sequence<-as.numeric(monthly.prov.cases.seq$n.sequence)
+monthly.prov.cases.seq$proportion.sequence<-as.numeric(monthly.prov.cases.seq$proportion.sequence)
+
+#turn NAs into zeroes
+monthly.prov.cases.seq$n.sequence<-na.replace(monthly.prov.cases.seq$n.sequence,0)
+monthly.prov.cases.seq$n.cases<-na.replace(monthly.prov.cases.seq$n.cases,0)
+
+#Calculate a probability of selecting an individual sequence in downsampled dataset
+monthly.prov.cases.seq<-monthly.prov.cases.seq %>% dplyr::mutate ("probability"=proportion.cases/n.sequence)
+
+#Change any NA probabilities to 0
+monthly.prov.cases.seq$proportion.cases<-na.replace(monthly.prov.cases.seq$proportion.cases,0)
+monthly.prov.cases.seq$probability<-na.replace(monthly.prov.cases.seq$probability,0)
+
+na.prob<-which(is.na(monthly.prov.cases.seq$probability))
+if(length(na.prob)>0){
+  monthly.prov.cases.seq$probability[na.prob]<-0
+}
+
+## Make monthly plots for provinces
+
+## Provinces' DENSITY PROPRTIONAL CONTRIBUTIONS
+#change month into a numeric date variable to smoothen
+monthly.prov.cases.seq<-monthly.prov.cases.seq %>% mutate(date.smooth=as.Date(paste(month,"-01",sep="")))
+
+#order
+monthly.prov.cases.seq$division<-factor(monthly.prov.cases.seq$division, levels=ord.prov)
+
+plot.monthly.cases<-ggplot(monthly.prov.cases.seq, aes(x=date.smooth,y=n.cases,group=division, fill=division))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1)+
+  theme(#legend.position="none",
+    legend.position = c(0.05,0.95),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(-5,-5,-5,-5),
+        legend.justification=c(0,1),
+        legend.background = element_blank())+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.7,keyheight = 0.7, title="Province"))+  
+  ProvFillScale2+
+  labs(y="Monthly new diagnoses",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  # scale_y_continuous(expand=c(0,0),limits=c(0,205000),breaks=seq(0,200000,50000),labels=c("0","50K","100K","150K","200K"))+
+  theme(panel.background=element_rect("grey95"))
+
+plot.monthly.cases
+ggsave(paste(f.out,"/CanadianMonthlyCasesByProvMonth.png",sep=""),width=5,height=4,units="in")
+
+##Repeat with sequence representation before sampling
+plot.seqs.monthly<-ggplot(monthly.prov.cases.seq, aes(x=date.smooth,y=n.sequence,group=division, fill=division))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1)+
+  theme(legend.position = "none")+
+  ProvFillScale2+
+  labs(y="Monthly clean sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  # scale_y_continuous(expand=c(0,0),limits=c(0,6650),breaks=seq(0,6000,1000),labels=c("0","1K","2K","3K","4K","5K","6K"))+
+  theme(legend.position = "none",panel.background=element_rect("grey95"))
+
+plot.seqs.monthly
+ggsave(paste(f.out,"/CanadianMonthlySeqsAvailableByProvMonthTotal.png",sep=""),width=5,height=4,units="in")
+
+## Provinces' DENSITY PROPRTIONAL CONTRIBUTIONS
+P4.p<-ggplot(monthly.prov.cases.seq, aes(x=date.smooth,y=proportion.cases,group=division, fill=division))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1)+
+  theme(legend.position = "none",
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(-5,-5,-5,-5),
+        legend.justification=c(0,1),
+        legend.background = element_blank())+
+  guides(fill=guide_legend(title.position = "top",keywidth = 1,keyheight = 1, title="Province"))+  
+  ProvFillScale2+
+  labs(y="Proportion monthly new diagnoses",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  # scale_y_continuous(expand=c(0,0),limits=c(0,210000),breaks=seq(0,200000,50000),labels=c("0","50K","100K","150K","200K"))+
+  theme(panel.background=element_rect("grey95"))
+
+P4.p
+ggsave(paste(f.out,"/CanadianMonthlyCasesByProvMonth_proportionStack.png",sep=""),width=5,height=4,units="in")
+
+##Repeat with sequence representation before sampling
+P5.p<-ggplot(monthly.prov.cases.seq, aes(x=date.smooth,y=proportion.sequence,group=division, fill=division))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1)+
+  theme(legend.position = "none")+
+  ProvFillScale2+
+  labs(y="Proportion monthly sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  # scale_y_continuous(expand=c(0,0),breaks=seq(0,3000,1000),labels=c("0","1K","2K","3K"))+
+  theme(legend.position = "none",panel.background=element_rect("grey95"))
+
+P5.p
+ggsave(paste(f.out,"/CanadianMonthlySequencesAvailableByProvMonth_proportionStack.png",sep=""),width=5,height=4,units="in")
+```
+
+
+## Make nice grob figures for the supplement
+## supp fig of estimating provincial variant cases
+```{r}
+#change to shortened for NL
+
+# New facet label names for supp variable
+div.labs <-levels(meta.can.var.prov.daily.full3$division) %>% str_replace_all( "Newfoundland and Labrador", "Newfoundland")
+names(div.labs) <- levels(meta.can.var.prov.daily.full3$division)
+
+plot.daily.ave.seqs.voc.prov.noleg<-plot.daily.ave.seqs.voc.prov+
+  theme(legend.position = "none",
+        strip.text=element_text(size=rel(0.8)))+
+  facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs))
+
+
+
+#add legend separately
+# plot.daily.ave.seqs.voc.prov.noleg#A
+plot.proportion.VOC.byprov.full.2<-plot.proportion.VOC.byprov.full+
+  facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs)) #B
+plot.can.new.diag.prov.2<-plot.can.new.diag.prov+
+  facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs)) #C
+plot.daily.ave.voc.cases.prov.2<-plot.daily.ave.voc.cases.prov+
+  facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs))  #D
+prov.var.cases.grob<-plot_grid(plot.daily.ave.seqs.voc.prov.noleg, 
+                               plot.proportion.VOC.byprov.full.2,
+                               plot.can.new.diag.prov.2,
+                               plot.daily.ave.voc.cases.prov.2,
+                               labels=LETTERS[1:4],
+                               nrow=2,align="hv")
+## NOW add a legend to the top
+leg2<-get_legend(plot.daily.ave.seqs.voc.prov)
+plot_grid(leg2, prov.var.cases.grob, rel_heights=c(0.1,1),nrow=2)
+ggsave(paste0(f.out,"/FigS4_prov.var.cases.grob.png"),height=7,width=9,units="in")
+```
+
+## supp fig of provincial variant cases, grouped by variant
+```{r}
+plot.daily.ave.seqs.prov.voc.noleg<-plot.daily.ave.seqs.prov.voc+theme(legend.position="none") #A
+plot.monthly.proportion.byprov.VOC#B
+plot.daily.ave.prov.cases.voc.noleg<-plot.daily.ave.prov.cases.voc+theme(legend.position="none")  #C
+plot.monthly.proportion.prov.byVOC.noleg<- plot.monthly.proportion.prov.byVOC+theme(legend.position="none") #D
+
+prov.var.cases.grob2<-plot_grid(plot.daily.ave.seqs.prov.voc.noleg, 
+                               plot.monthly.proportion.byprov.VOC,
+                               plot.daily.ave.prov.cases.voc.noleg,
+                               plot.monthly.proportion.prov.byVOC.noleg,
+                               labels=LETTERS[1:4],
+                               nrow=2,align="hv",axis="rt")
+prov.var.cases.grob2
+## NOW add a legend to the top
+leg22<-get_legend(plot.daily.ave.seqs.prov.voc)
+plot_grid(leg22, prov.var.cases.grob2, rel_heights=c(0.1,1.5),nrow=2)
+ggsave(paste0(f.out,"/FigS5_prov.byvar.cases.grob.png"),height=7.5,width=9,units="in")
+```
+
+
+
+## Remove some of the large objects to free up memory
+```{r}
+rm(can)
+rm(meta.can)
+rm(meta.can.daily)
+rm(meta.can.daily.full)
+rm(meta.can.var.daily.full2)
+rm(meta.can.var.daily.full3)
+rm(meta.can.var.prov.daily)
+rm(meta.can.var.prov.daily.full)
+rm(meta.can.var.prov.daily.full2)
+rm(meta.can.var.prov.daily.full2.total)
+rm(meta.can.var.prov.daily.full22)
+rm(meta.can.var.prov.daily.full22.total)
+rm(meta.can.var.prov.daily.full22m)
+rm(meta.can.var.prov.daily.full22m.total)
+rm(meta.can.var.prov.daily.full.pm)
+rm(meta.can.var.prov.daily.full.pm.total)
+rm(meta.can.var.prov.daily.full.month)
+rm(meta.can.var.prov.daily.full.month.temp)
+rm(meta.can.var.prov.daily.full.p)
+rm(meta.can.var.prov.daily.full.p.total)
+rm(meta.can.var.prov.daily.full33)
+rm(meta.can.var.prov.daily.full3)
+rm(meta.can.var.prov.daily.full4)
+rm(meta.can.daily.full.red)
+rm(prov)
+rm(prov.red)
+```
+
+# Global cases, seqs pre-subsampling
+
+## Read and clean the global case data - skip if have run before
+```{r}
+# #update the dataset, can be slow if it's been a while
+# coronavirus <- refresh_coronavirus_jhu()
+# 
+# #add a column in the coronavirus df for month
+# coronavirus$month<-format(as.Date(coronavirus$date), "%Y-%m")
+# # table(coronavirus$month)
+# 
+# #restrict up to datadate
+# coronavirus<-coronavirus[which(coronavirus$date<as.Date(data.date)),]
+# # unique(coronavirus$month)
+# 
+# #only interested in country-based here 
+# coronavirus$country<-NA
+# for (i in 1:nrow(coronavirus)){
+#   if(coronavirus$location_type[i]=="country") {coronavirus$country[i]<-coronavirus$location[i]; next}
+#   #otherwise stringsplit it
+#   coronavirus$country[i]<-last(unlist(str_split(coronavirus$location[i],", ")))
+# }
+# 
+# #find NAs and fix
+# any(is.na(unique(coronavirus$country)))
+# 
+# #remove obvious discards
+# rem<-which(coronavirus$country%in%c("Winter Olympics 2022","Summer Olympics 2020","Diamond Princess","MS Zaandam" ))
+# if(length(rem)>0){
+#   coronavirus<-coronavirus[-rem,]
+# }
+# 
+# # make manual changes to labels
+# coronavirus$country<-as.character(coronavirus$country) #change to character for all
+# coronavirus$country<-str_replace_all(coronavirus$country,c("USAA"="USA",
+#                                                            "US$"="USA",
+#                                                            "$Bahamas"="The Bahamas",
+#                                                            "$Congo"="Democratic Republic of the Congo",
+#                                                            "Congo \\(Brazzaville\\)"="Democratic Republic of the Congo",
+#                                                            "Congo \\(Kinshasa\\)"="Democratic Republic of the Congo",
+#                                                            "Democratic Republic of the Congo \\(Brazzaville\\)"= "Democratic Republic of the Congo",
+#                                                            "Democratic Republic of the Congo \\(Kinshasa\\)"="Democratic Republic of the Congo",
+#                                                            "Holy See"="Italy",
+#                                                            "West Bank and Gaza"="Egypt",
+#                                                            "Taiwan\\*"="Taiwan",
+#                                                            "Czechia"="Czech Republic",
+#                                                            "Cote d\\'Ivoire"="Cote dIvoire",
+#                                                            "Korea, North"="North Korea"))
+# # table(coronavirus$country)
+# # any(is.na(coronavirus$country))
+# 
+# ## add a df of continents and countries for subsequent lookup
+# 
+# # table(coronavirus$country)
+# continents<-read.csv(continents.in)
+# #manual changes
+# continents$Country<-str_replace_all(continents$Country, c("CZ"="Czech Republic","Korea, North"="North Korea", 
+#                               "Korea, South"="South Korea", 
+#                               "Congo, Democratic Republic of"="Democratic Republic of the Congo",
+#                               "Burma \\(Myanmar\\)" = "Burma",
+#                               "Cape Verde"="Cabo Verde",
+#                               "East Timor"="Timor-Leste",
+#                               "US"="USA",
+#                               "Ivory Coast"="Cote dIvoire",
+#                               "Burkina"="Burkina Faso",
+#                               "Swaziland"="Eswatini",
+#                               "Russian Federation"="Russia",
+#                               "Macedonia"="North Macedonia"))
+# #Add missing countries
+# continents<-bind_rows(continents,data.frame("Continent"="Antarctica","Country"="Antarctica"))
+# continents<-bind_rows(continents,data.frame("Continent"="Europe","Country"="Kosovo"))
+# continents<-bind_rows(continents,data.frame("Continent"="Asia","Country"="Taiwan"))
+# colnames(continents)<-c("region","country")
+# 
+# #check all matchy
+# unique(coronavirus$country[which(!coronavirus$country %in% continents$country)])
+# 
+# #join continents
+# coronavirus<-left_join(coronavirus, continents, by="country")
+# 
+# ## Apply geo lookup to coronavirus data and global metadata
+# 
+# #duplicate the original country
+# coronavirus$country.og<-coronavirus$country
+# 
+# #apply lookup
+# coronavirus$new.geo<-coronavirus$region #default
+# for (i in 1:nrow(coronavirus)){
+#     #if it is found in the new locs, replace it (for countries with lots of seqs)
+#     if(coronavirus$country[i] %in% lookup.geo$new.loc){coronavirus$new.geo[i]<-coronavirus$country[i]}
+#     #if it is NOT found in the new locs, but is in the old, then assign new loc 
+#     if(! coronavirus$country[i] %in% lookup.geo$new.loc & 
+#        coronavirus$country[i] %in% lookup.geo$og.loc){
+#       match<-which(lookup.geo$og.loc == coronavirus$country[i])
+#       coronavirus$new.geo[i]<- lookup.geo$new.loc [match]
+#     }
+# }
+# 
+# #check
+# length(unique(coronavirus[which(is.na(coronavirus$new.geo)),"location"]))
+# #SHOULD BE ZERO NA
+# 
+# #replace 'country' with new.geo which are global regions (big origins and continents)
+# coronavirus$country<-coronavirus$new.geo
+# 
+# ## Make df of global cases and deaths from coronavirus df, grouped by global region
+# 
+# #where divisions are separated, need to group by country so unique row per country/date
+# globalcases<-coronavirus %>% 
+#   filter(data_type=="cases_new") %>% 
+#   group_by(country,date) %>% 
+#   summarize(.groups="rowwise",total=sum(value,na.rm=T)) %>%
+#   left_join(month.df, by ="date") %>%
+#   as.data.frame()
+# 
+# globaldeaths<-coronavirus %>% 
+#   filter(data_type=="deaths_new") %>% 
+#   group_by(country,date) %>% 
+#   summarize(.groups="rowwise",total=sum(value,na.rm=T)) %>%
+#   left_join(month.df, by ="date") %>%
+#   as.data.frame()
+# 
+# #make a tentative order
+# ord.country<-globalcases %>% group_by(country) %>% summarize(total.overall=sum(total,na.rm = T)) %>% arrange(-total.overall) %>%  getElement('country')
+# ord.country2<-names(globalPalette.ch)[15:length( globalPalette.ch)] #ordered by continent, provinces and canada excluded
+# 
+# ## setup  rolling daily average of cases in glob, by country
+# globalcases$date<-as.Date(globalcases$date)
+# #note there are no missing dates, so just compute the rolling average
+# globalcases<-globalcases %>% dplyr::group_by(country) %>% mutate(avgtotal_last7=zoo::rollmean(total, k=7, fill = NA, align="right"))
+# 
+# #Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+# globalcases$avgtotal_mod<-globalcases$avgtotal_last7
+# for (i in 1:nrow(globalcases)){ 
+#   #if avg is NA or 0
+#   if(is.na(globalcases$avgtotal_mod[i]) | globalcases$avgtotal_mod[i]==0){
+#     #and if number cases today is not NA, use that
+#     if(!is.na(globalcases$total[i])){
+#       globalcases$avgtotal_mod[i]<-globalcases$total[i]
+#     }
+#   }
+# }
+# 
+# #which have negatives
+# if(any(globalcases$avgtotal_mod<0)){
+#   globalcases$avgtotal_mod[which(globalcases$avgtotal_mod<0)]<-0
+# }
+# 
+# globalcases$country<-factor(globalcases$country, levels=ord.country2)
+# 
+# #Write this object for future use
+# write.csv(globalcases,paste(f.out,"/globalcases.csv",sep=""),row.names = F)
+```
+
+## Shortcut
+```{r}
+f.old<-"Results_PreSubsamp_omi_2023/globalcases.csv"
+globalcases<-read.csv(f.old)
+ord.country<-globalcases %>% group_by(country) %>% summarize(total.overall=sum(total,na.rm = T)) %>% arrange(-total.overall) %>%  getElement('country')
+ord.country2<-names(globalPalette.ch)[15:length( globalPalette.ch)] #ordered by continent, provinces and canada excluded
+globalcases$country<-factor(globalcases$country, levels=ord.country2)
+globalcases$date<-as.Date(globalcases$date)
+```
+
+## plot global new diagnoses by global region over time
+```{r}
+#timeline restricted to after november 2020
+plot.cases.glob.restr<-globalcases %>%
+  ggplot()+
+  labs(x=NULL, y="Average new diagnoses")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position=c(0.28,0.66),
+        legend.text=element_text(size=rel(0.7)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=country,fill=country),stat="identity",width=1)+
+  scaleDateBusy+
+  CountryFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  guides(fill=guide_legend(title="Global Region",title.position = "top", 
+                           keywidth = 0.7,keyheight = 0.7,ncol=2))
+plot.cases.glob.restr
+ggsave(paste(f.out,"/globAvgDiagBycountry.png",sep=""),width=5,height=3,units="in")
+```
+
+## Plot rolling average covid deaths in glob by country
+incomplete data! 
+```{r}
+# #compute average daily deaths
+# globaldeaths$country<-factor(globaldeaths$country, levels=ord.country2)
+# globaldeaths$date<-as.Date(globaldeaths$date)
+# 
+# #Remove any negatives
+# globaldeaths$total[which(globaldeaths$total<0)]<-0
+# #note there are no missing dates, so just compute the rolling average
+# globaldeaths<-globaldeaths %>% dplyr::group_by(country) %>% mutate(avgtotal_last7=zoo::rollmean(total, k=7, fill = NA, align="right"))
+# 
+# #Make a composite that has individual total for observations before rolling average could be calculated
+# globaldeaths$avgtotal_deaths_mod<-globaldeaths$avgtotal_last7
+# for (i in 1:nrow(globaldeaths)){ 
+#   #if avg is NA or 0
+#   if(is.na(globaldeaths$avgtotal_deaths_mod[i]) | globaldeaths$avgtotal_deaths_mod[i]==0){
+#     #and if number cases today is not NA, use that
+#     if(!is.na(globaldeaths$total[i])){
+#       globaldeaths$avgtotal_deaths_mod[i]<-globaldeaths$total[i]
+#     }
+#   }
+# }
+# 
+# #restricted to after november 2020
+# plot.deaths.glob<-globaldeaths %>%
+#   ggplot()+
+#   labs(x=NULL, y="Average COVID-19 deaths")+
+#   pubThemeDate+
+#   theme(axis.title.y=element_text(size=rel(1)),
+#         legend.position="none",
+#         legend.text=element_text(size=rel(0.7)),
+#         # axis.text.x=element_blank(),
+#         # axis.ticks.x = element_blank(),
+#         plot.margin = margin(1,1,1,1,unit="pt"))+
+#   geom_bar(aes(x=date,y=avgtotal_deaths_mod,group=country,fill=country),stat="identity",width=1)+
+#   scaleDateBusy+
+#   CountryFillScale+
+#   scale_y_continuous(expand=expansion(add = c(0,0)))+
+#   guides(fill=guide_legend(title="country",title.position = "top", 
+#                            keywidth = 0.7,keyheight = 0.7,ncol=2))
+# plot.deaths.glob
+# ggsave(paste(f.out,"/globAvgDeathsBycountry.png",sep=""),width=5,height=3,units="in")
+# #I think alot of countries stopped reporting deaths...should this be investigated? maybe
+```
+
+## Read in and clean global metadata for sequences (or see shortcut)
+```{r}
+# #read em and weep (slow b/c >8M rows)
+# meta.glob<-read.csv(meta.in.glob, header = TRUE)
+# 
+# #make some changes to meta country
+# meta.glob$country<-str_replace_all(meta.glob$country,"$Republic of the Congo","Democratic Republic of the Congo")
+# meta.glob$country<-str_replace_all(meta.glob$country,"\\'","") #just in case any cote d'ivoire - but should be dealt with
+# # unique(meta.glob$country)
+# 
+# #in order of first appearances in global, excluding if earlier than glob date
+# too.early<-c() #vector of IDs that need to be removed
+# for (i in 1:nrow(var.df)){
+#   mydates<-meta.glob$date[which(meta.glob$var.WHO == var.df$var.WHO[i])]
+#   tooearly<-which(mydates < as.Date(var.df$first.glob.date[i]))
+#   my.early.IDs<-meta.glob$Accession.ID[which(meta.glob$var.WHO == var.df$var.WHO[i] &
+#                                               meta.glob$date < as.Date(var.df$first.glob.date[i]))]
+#   too.early<-c(too.early, my.early.IDs)
+# }
+# 
+# #how many weirdos?
+# print(length(too.early))
+# 
+# #get rid of them! export this list to also filter during subsamp
+# write.csv(too.early,paste(f.out,"/too.early.IDs.glob.csv",sep=""))
+# 
+# #baii
+# if(length(which(meta.glob$Accession.ID %in% too.early)>0)){
+#   meta.glob<-meta.glob[-which(meta.glob$Accession.ID %in% too.early),]
+# }
+# 
+# # ## how many are we working with
+# print(nrow(meta.glob)) #8,310,497
+# 
+# # table(meta.glob$country, meta.glob$Lineage)
+# # table(meta.glob$Lineage)
+# # table(meta.glob$Location, meta.glob$month)
+# 
+# ## Apply geo lookup to metadata
+# #duplicate original column
+# meta.glob$country.og<-meta.glob$country
+# 
+# #apply lookup
+# meta.glob$new.geo<-meta.glob$region #default to continent
+# for (i in 1:nrow(meta.glob)){
+#     #if country is in new.loc, add it
+#     if(meta.glob$country[i] %in% lookup.geo$new.loc){
+#       meta.glob$new.geo[i]<-meta.glob$country[i]
+#     }
+#     #if it is NOT found in the new locs, then find it in old locs and use new loc for that
+#     if(! meta.glob$country[i] %in% lookup.geo$new.loc &
+#         meta.glob$country[i] %in% lookup.geo$og.loc ){
+#       match<-which(lookup.geo$og.loc == meta.glob$country[i])
+#       meta.glob$new.geo[i]<- lookup.geo$new.loc [match]
+#     }
+# }
+# 
+# #check
+# any(is.na(meta.glob$new.geo))
+# 
+# #replace
+# meta.glob$country<-meta.glob$new.geo
+# 
+# #write the updated meta.glob with new geos
+# write.csv(meta.glob,paste(f.out,"/meta.glob.csv",sep=""),row.names = F)
+# 
+# #write table of sequence availability by country, month, VOC
+# glob.seq.rep<-table(meta.glob$month,meta.glob$country, meta.glob$var.WHO)
+# write.csv(glob.seq.rep,paste(f.out,"/globSequenceAvailableBycountryMonthVOC.csv",sep=""))
+
+```
+
+## shortcut
+```{r}
+meta.glob<-read.csv("archive/Results_PreSubsamp_omi/meta.glob.csv")
+# meta.glob<-read.csv(paste(f.out,"/meta.glob.csv",sep=""))
+meta.glob$date<-as.Date(meta.glob$date)
+
+#check if other omicron lineages missed
+table(meta.glob$Lineage[meta.glob$var.WHO=="Omicron"])
+#there is global BA.3, but it hadn't been identified in canada yet
+
+### CHANGE to split omicron lineages into their owncats
+omi.ba1<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.1")
+omi.ba11<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.1.1")
+omi.ba2<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.2")
+omi.ba3<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.3")
+
+meta.glob$var.WHO[omi.ba1]<-"BA.1"
+meta.glob$var.WHO[omi.ba11]<-"BA.1.1"
+meta.glob$var.WHO[omi.ba2]<-"BA.2"
+meta.glob$var.WHO[omi.ba3]<-"BA.3"
+
+# table(meta.glob$Lineage[meta.glob$var.WHO=="Omicron"]) #BA.1 BA.1.1   BA.2 and 2 None
+#remove the lineage==none within omicron, n=2
+no.omi<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="None")
+if(length(no.omi)>0){
+  meta.glob<-meta.glob[-no.omi,]
+}
+
+```
+
+## Plot daily average # sequences by country
+```{r}
+#summarize by day
+meta.glob.daily<-meta.glob %>% dplyr::group_by(date,country)%>%
+  dplyr::summarise(.groups="rowwise",total=n())
+
+#need to add rows for missing dates, new approach
+alldays<-seq(ymd(first(sort(meta.glob.daily$date))),
+    ymd(last(sort(meta.glob.daily$date))),
+    by='1 day')
+  
+allcounts<-unique(meta.glob$country)
+#empty df
+emptydf<-meta.glob.daily[0,]
+emptydf$date<-as.Date(emptydf$date)
+
+#for each country
+for (i in 1:length(allcounts)){
+  mycount<-allcounts[i]
+  myrows<-which(meta.glob.daily$country==mycount)
+  #which days aren't covered
+  missingdays<-alldays[which(!alldays %in% meta.glob.daily$date[myrows])]
+  #make a tempdf then bind it to the emptydf
+  emptydf<-bind_rows(emptydf, 
+                     data.frame(date=missingdays,country=mycount, total=0))
+  
+}
+
+#bind the blank df to the other df
+meta.glob.daily$date<-as.Date(meta.glob.daily$date)
+meta.glob.daily.full<-bind_rows(meta.glob.daily, emptydf)
+
+# sort by date within country and var
+meta.glob.daily.full<-meta.glob.daily.full[
+  with(meta.glob.daily.full, order(country, date)),
+]
+
+#calculate rolling averages
+meta.glob.daily.full$avgtotal <- zoo::rollmean(meta.glob.daily.full$total,k = 7,fill = NA,align="right")
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+meta.glob.daily.full$avgtotal_mod<-meta.glob.daily.full$avgtotal
+for (i in 1:nrow(meta.glob.daily.full)){ 
+  #if avg is NA or 0
+  if(is.na(meta.glob.daily.full$avgtotal_mod[i]) | meta.glob.daily.full$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(meta.glob.daily.full$total[i])){
+      meta.glob.daily.full$avgtotal_mod[i]<-meta.glob.daily.full$total[i]
+    }
+  }
+}
+
+#order the countries
+meta.glob.daily.full$country<-factor(meta.glob.daily.full$country,levels=ord.country2)
+
+#write this object
+write.csv(meta.glob.daily.full,paste(f.out,"/meta.glob.daily.full.csv",sep=""),row.names = F)
+
+## PLOT average daily sequences for all of global regions
+plot.daily.ave.seqs.country<-meta.glob.daily.full%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=country,fill=country),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  CountryFillScale+
+  scaleDateBusy
+
+plot.daily.ave.seqs.country
+ggsave(paste(f.out,"/globAverageDailySequencesBycountry.png",sep=""), height=3,width=5,units="in")
+
+```
+
+## Plot average daily sequence representation by country
+```{r}
+#merge the rolling average daily diagnoses and total sequences together by day and country
+meta.glob.daily.full.red<-meta.glob.daily.full[,c("date","country","avgtotal_mod")]
+colnames(meta.glob.daily.full.red)<-c("date","country","avg_seqs")
+country.reduced<-globalcases[,c("date","country","avgtotal_mod","month")]
+colnames(country.reduced)<-c("date","country","avg_cases","month")
+# class(country.reduced$country)
+# class(meta.glob.daily.full$country)
+glob.cases.seqs.daily<-left_join(meta.glob.daily.full.red, country.reduced, by=c("date","country"))
+
+#replace NAs with zeros
+glob.cases.seqs.daily$avg_seqs<-na.replace(glob.cases.seqs.daily$avg_seqs, 0)
+
+#calculate seq.rep=seq/case
+glob.cases.seqs.daily<-glob.cases.seqs.daily %>% mutate(avg_seqpercase=avg_seqs/avg_cases)
+
+#plot this over time by country
+plot.daily.seqrep.bycountry<-glob.cases.seqs.daily %>%
+  filter(date>as.Date(start.date)) %>%
+  ggplot()+
+  geom_line(aes(x=date,y=avg_seqpercase,color=country))+
+  scaleDateBusy+
+  CountryColScale+
+  theme(legend.position = "none")+
+  labs(x=NULL,y="Sequence per case")+
+  facet_wrap(~country, scales="free_y",nrow=3)+
+  pubThemeDate
+  # scale_y_continuous(limits=c(0,2))
+#these are pretty off... due to data dumps and inferring incomplete dates as random dates
+plot.daily.seqrep.bycountry
+ggsave(paste(f.out,"/globAverageDailySequenceRep.bycountry.png",sep=""),width=8.5, height=4, units="in")  
+
+```
+
+## Plot daily average sequences by VOC group for global 
+```{r}
+#summarize by day
+meta.glob.var.daily<-meta.glob %>% dplyr::group_by(date,var.WHO)%>%
+  dplyr::summarise(.groups="rowwise",total=n())
+# table(meta.glob.var.daily$var.WHO)
+
+#need to add rows for missing dates
+alldays<-seq(ymd(first(sort(meta.glob.var.daily$date))),
+    ymd(last(sort(meta.glob.var.daily$date))),
+    by='1 day')
+  
+allvars<-unique(meta.glob.var.daily$var.WHO)
+emptydf<-meta.glob.var.daily[0,]
+emptydf$date<-as.Date(emptydf$date)
+
+for (j in 1:length(allvars)){
+    myvar<-allvars[j]
+    myrows<-which( meta.glob.var.daily$var.WHO==myvar)
+    #which days aren't covered
+    missingdays<-alldays[which(!alldays %in% meta.glob.var.daily$date[myrows])]
+    #make a tempdf then bind it to the emptydf
+    emptydf<-bind_rows(emptydf, 
+                       data.frame(date=missingdays,var.WHO=myvar, total=0))
+}
+
+#bind the blank df to the other df
+meta.glob.var.daily$date<-as.Date(meta.glob.var.daily$date)
+meta.glob.var.daily.full<-bind_rows(meta.glob.var.daily, emptydf)
+
+# sort by date var
+meta.glob.var.daily.full<-meta.glob.var.daily.full[
+  with(meta.glob.var.daily.full, order(var.WHO, date)),
+]
+
+#calculate rolling averages
+meta.glob.var.daily.full$avgtotal <- zoo::rollmean(meta.glob.var.daily.full$total,k = 7,fill = NA,align="right") 
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+meta.glob.var.daily.full$avgtotal_mod<-meta.glob.var.daily.full$avgtotal
+for (i in 1:nrow(meta.glob.var.daily.full)){ 
+  #if avg is NA or 0
+  if(is.na(meta.glob.var.daily.full$avgtotal_mod[i]) | meta.glob.var.daily.full$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(meta.glob.var.daily.full$total[i])){
+      meta.glob.var.daily.full$avgtotal_mod[i]<-meta.glob.var.daily.full$total[i]
+    }
+  }
+}
+
+#order the vars
+#restricted to the variants of the study
+meta.glob.var.daily.full$var.WHO<-factor(meta.glob.var.daily.full$var.WHO,levels=var.ord)
+
+## PLOT average daily sequences for all global
+plot.daily.ave.seqs.voc<-meta.glob.var.daily.full%>%
+  # filter(var.WHO %in% var.ord.red) %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(0.9)),
+        legend.position=c(0.25,0.72),
+        legend.text=element_text(size=rel(0.8)),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_mod,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title="Variant",title.position = "top", 
+                           keywidth = 0.6,keyheight = 0.6,ncol=2))
+plot.daily.ave.seqs.voc
+ggsave(paste(f.out,"/globAverageDailySequencesByVOC.png",sep=""), height=3,width=5,units="in")
+```
+
+## Plot daily average proportions of VOC for global
+```{r}
+#calculate the proportions
+meta.glob.var.daily.full2<-meta.glob.var.daily.full
+
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.glob.var.daily.full2$prop<-as.numeric(NA)
+for (i in 1:nrow(meta.glob.var.daily.full2)){
+  meta.glob.var.daily.full2$prop[i]<-meta.glob.var.daily.full2$avgtotal_mod[i]/sum(meta.glob.var.daily.full2$avgtotal_mod [which(meta.glob.var.daily.full2$date==meta.glob.var.daily.full2$date[i])])
+}
+  
+#replace NA and inf with 0
+meta.glob.var.daily.full2$prop<-na.replace(meta.glob.var.daily.full2$prop,0)
+
+#plot the proportional VOC contribs for whole of global
+plot.proportion.VOC.global<-meta.glob.var.daily.full2 %>% 
+  ggplot( aes(x=date,y=prop,group=var.WHO, fill=var.WHO))+
+  geom_bar(position="stack",stat="identity",lwd=0,width=1)+
+  VarFillScaleRed+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none",
+         axis.title.y=element_text(size=rel(0.9)))
+plot.proportion.VOC.global
+ggsave(paste(f.out,"/AverageDailySequencesByVOC_global_proportion.png",sep=""), height=3,width=5,units="in")
+```
+
+## Impute estimated variant cases for global
+```{r}
+#here, glob is a total across all countries
+glob<-globalcases %>% group_by(date) %>% summarize(avgtotal_last7=sum(avgtotal_last7,na.rm=T))
+
+## multiply the daily average proportions by the daily average sequences for all of global
+#daily average cases for global
+# head(glob$avgtotal_last7)
+
+#make a modified count with incomplete dates
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+glob$avgtotal_mod<-glob$avgtotal_last7
+for (i in 1:nrow(glob)){ 
+  #if avg is NA or 0
+  if(is.na(glob$avgtotal_mod[i]) | glob$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(glob$numtoday[i])){
+      glob$avgtotal_mod[i]<-glob$numtoday[i]
+    }
+  }
+}
+
+#reduce glob data
+glob.red<-glob[,c("date","avgtotal_mod")]
+colnames(glob.red)<-c("date","avgtotal_cases")
+
+meta.glob.var.daily.full3<-left_join(meta.glob.var.daily.full2, glob.red, by="date")
+#replace NAs with zeroes
+meta.glob.var.daily.full3$avgtotal_cases<-na.replace(meta.glob.var.daily.full3$avgtotal_cases, 0)
+head(meta.glob.var.daily.full3)
+
+#compute the avgVOC_cases
+meta.glob.var.daily.full3<-meta.glob.var.daily.full3 %>% mutate(avgVOC_cases = prop * avgtotal_cases)
+
+#Plot the avgVOC_cases by var.WHO for all of global
+plot.daily.ave.voc.cases<-meta.glob.var.daily.full3%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(0.9)),
+        legend.position=c(0.22,0.7),
+        legend.text=element_text(size=rel(0.8)),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title="Variant",title.position = "top", 
+                           keywidth = 0.7,keyheight = 0.7,ncol=2))
+plot.daily.ave.voc.cases
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_global.png",sep=""), height=3,width=5,units="in")
+
+#no legend version
+plot.daily.ave.voc.cases.noleg<-meta.glob.var.daily.full3%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(0.9)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.7,keyheight = 0.7, title="Variant"))
+plot.daily.ave.voc.cases.noleg
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_global-noleg.png",sep=""), height=3,width=5,units="in")
+
+#export this object
+write.csv(meta.glob.var.daily.full3,paste0(f.out,"/meta.glob.var.daily.full3.csv"))
+
+
+## Make a zoomed in version 
+plot.daily.ave.voc.cases.noleg.sh<-plot.daily.ave.voc.cases.noleg+
+  coord_cartesian(ylim=c(0,1.5e5))
+plot.daily.ave.voc.cases.noleg.sh
+```
+
+## grob together for a supplementary figure, as with canada
+```{r}
+# plot.daily.ave.seqs.voc
+# plot.proportion.VOC.global
+# plot.daily.ave.voc.cases.noleg
+# plot.daily.ave.voc.cases.noleg.sh
+
+plot.daily.ave.seqs.voc.noax<-plot.daily.ave.seqs.voc+
+  theme(axis.text.x  = element_blank(),  plot.margin = margin(2,2,0,2,"pt"))
+plot.proportion.VOC.global.noax<-plot.proportion.VOC.global+
+  theme(axis.text.x  =element_blank(), plot.margin = margin(2,2,0,2,"pt"))
+plot.daily.ave.voc.cases.noleg2<-plot.daily.ave.voc.cases.noleg+
+  theme(axis.text.x  =element_blank(),   legend.position="none",
+        plot.margin = margin(2,2,0,2,"pt"))
+plot.daily.ave.voc.cases.noleg.sh2<-plot.daily.ave.voc.cases.noleg.sh+
+  theme(legend.position="none",plot.margin = margin(2,2,2,2,"pt"))
+
+plot.glob.varcase<-plot_grid(plot.daily.ave.seqs.voc.noax, plot.proportion.VOC.global.noax, plot.daily.ave.voc.cases.noleg2,plot.daily.ave.voc.cases.noleg.sh2,
+          labels=LETTERS[1:4],nrow=4,
+          align="v", label_x = 0.01,label_y=0.99,
+          rel_heights=c(1,0.8,0.7,0.9))
+plot.glob.varcase
+ggsave(paste0(f.out,"/supp.plot.global.varcase.png"),height=9,width=6,units="in")
+```
+
+## Make a version of this plot together with the Canadian one
+```{r}
+#make room for global anad canada labels on top
+plot.daily.ave.seqs.voc.noax.bigmarg<-plot.daily.ave.seqs.voc.noax+
+  theme(plot.margin = margin(22,2,0,2,"pt"))
+plot.daily.ave.seqs.voc.noax.can.noleg.bigmarg<-plot.daily.ave.seqs.voc.noax.can.noleg+theme(plot.margin = margin(22,2,0,2,"pt"))
+#remove y axis from Canadian plots
+plot.daily.ave.seqs.voc.noax.can.noleg.bigmarg.noy<-plot.daily.ave.seqs.voc.noax.can.noleg.bigmarg+theme(axis.title.y=element_blank())
+plot.proportion.VOC.canada.noax.noy<-plot.proportion.VOC.canada.noax+theme(axis.title.y=element_blank())
+plot.daily.ave.voc.cases.noleg.can.noy<-plot.daily.ave.voc.cases.noleg.can+theme(axis.title.y=element_blank())
+plot.daily.ave.voc.cases.short2.can.noy<-plot.daily.ave.voc.cases.short2.can+theme(axis.title.y=element_blank())
+
+
+plot.glob.varcase.mod<-plot_grid(plot.daily.ave.seqs.voc.noax.bigmarg,
+                                 plot.proportion.VOC.global.noax,
+                                 plot.daily.ave.voc.cases.noleg2,
+                                 plot.daily.ave.voc.cases.noleg.sh2,
+          labels=LETTERS[1:4],nrow=4,
+          align="v", label_x = 0.02,label_y=0.99,
+          rel_heights=c(0.85,0.7,0.7,0.8))
+plot.can.varcase.mod<-plot_grid(plot.daily.ave.seqs.voc.noax.can.noleg.bigmarg.noy,
+                                plot.proportion.VOC.canada.noax.noy,
+                                plot.daily.ave.voc.cases.noleg.can.noy,
+                                plot.daily.ave.voc.cases.short2.can.noy,
+          labels=NULL,nrow=4,
+          align="v", label_x = 0.01,label_y=0.99,
+          rel_heights=c(0.85,0.7,0.7,0.8))
+plot.all.var.case<-plot_grid(plot.glob.varcase.mod,plot.can.varcase.mod,
+                             nrow=1,ncol=2,labels=c("Global","Canada"),
+                             label_y=0.999,label_x=c(0.4,0.35))#,
+                             #label_x=0,label_size=3, label_y=0.05)
+plot.all.var.case
+ggsave(paste0(f.out,"/suppFig.global.canada.varcase.png"),height=9,width=8,units="in")
+
+```
+
+
+## Daily average sequences of each VOC for each country 
+```{r}
+#summarize by day voc and country
+meta.glob.var.country.daily<-meta.glob %>% dplyr::group_by(date,var.WHO,country)%>%
+  dplyr::summarise(.groups="rowwise",total=n())
+ 
+#need to add rows for missing dates
+alldays<-seq(ymd(first(sort(meta.glob.var.country.daily$date))),
+    ymd(last(sort(meta.glob.var.country.daily$date))),
+    by='1 day')
+
+## Different approach that is faster and better!!
+allcounts<-unique(meta.glob$country)
+allvars<-unique(meta.glob$var.WHO)
+
+emptydf<-meta.glob.var.country.daily[0,]
+emptydf$date<-as.Date(emptydf$date)
+#for each country
+for (i in 1:length(allcounts)){
+  mycount<-allcounts[i]
+  #for each var
+  for (j in 1:length(allvars)){
+    myvar<-allvars[j]
+    myrows<-which(meta.glob.var.country.daily$country==mycount &
+                    meta.glob.var.country.daily$var.WHO==myvar)
+    #which days aren't covered
+    missingdays<-alldays[which(!alldays %in% meta.glob.var.country.daily$date[myrows])]
+    #make a tempdf then bind it to the emptydf
+    emptydf<-bind_rows(emptydf,
+                       data.frame(date=missingdays,var.WHO=myvar, country=mycount, total=0))
+  }
+}
+
+#bind the blank df to the other df
+meta.glob.var.country.daily$date<-as.Date(meta.glob.var.country.daily$date)
+meta.glob.var.country.daily.full<-bind_rows(meta.glob.var.country.daily, emptydf)
+
+# sort by date within country and var
+meta.glob.var.country.daily.full<-meta.glob.var.country.daily.full[
+  with(meta.glob.var.country.daily.full, order(country, var.WHO, date)),
+]
+
+#calculate rolling averages
+meta.glob.var.country.daily.full <- meta.glob.var.country.daily.full %>% 
+  dplyr::group_by(var.WHO, country) %>% 
+  dplyr::mutate(avgtotal = zoo::rollmean(total,k = 7,fill = NA,align="right") )
+
+class(meta.glob.var.country.daily.full$avgtotal)
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+meta.glob.var.country.daily.full$avgtotal_mod<-meta.glob.var.country.daily.full$avgtotal
+for (i in 1:nrow(meta.glob.var.country.daily.full)){
+  #if avg is NA or 0
+  if(is.na(meta.glob.var.country.daily.full$avgtotal_mod[i]) | meta.glob.var.country.daily.full$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(meta.glob.var.country.daily.full$total[i])){
+      meta.glob.var.country.daily.full$avgtotal_mod[i]<-meta.glob.var.country.daily.full$total[i]
+    }
+  }
+}
+
+meta.glob.var.country.daily.full<-meta.glob.var.country.daily.full%>% filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) 
+
+meta.glob.var.country.daily.full$var.WHO<-factor(meta.glob.var.country.daily.full$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full$country<-factor(meta.glob.var.country.daily.full$country,levels=ord.country2)
+
+#remove NAs: BA.3 other
+rem<-which(is.na(meta.glob.var.country.daily.full$var.WHO))
+if(length(rem)>0){
+  meta.glob.var.country.daily.full<-meta.glob.var.country.daily.full[-rem,]
+}
+# which(is.na(meta.glob.var.country.daily.full$var.WHO))
+```
+
+```{r}
+# by country, PLOT average daily sequences by VOC and country
+plot.daily.ave.seqs.voc.country<-meta.glob.var.country.daily.full.no0%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=country,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  VarFillScaleRed+
+  scaleDateBusy+
+  facet_wrap(~country, scales="free_y",nrow=3)
+
+plot.daily.ave.seqs.voc.country
+ggsave(paste(f.out,"/globAverageDailySequencesByVOC-Bycountry.png",sep=""), height=4,width=8.5,units="in")
+
+## by country, facetted by voc
+meta.glob.var.country.daily.full.no0<-meta.glob.var.country.daily.full
+zeroes<-which(meta.glob.var.country.daily.full.no0$avgtotal_mod==0)
+meta.glob.var.country.daily.full.no0$avgtotal_mod[zeroes]<-NA
+NAs<-which(is.na(meta.glob.var.country.daily.full.no0$avgtotal_mod))
+meta.glob.var.country.daily.full.no0<-meta.glob.var.country.daily.full.no0[-NAs,]
+subzero<-which(meta.glob.var.country.daily.full.no0$avgtotal_mod<0.5)
+meta.glob.var.country.daily.full.no0<-meta.glob.var.country.daily.full.no0[-subzero,]
+
+# table(meta.glob.var.country.daily.full$var.WHO)
+# which(is.na(meta.glob.var.country.daily.full$var.WHO))
+
+plot.daily.ave.seqs.voc.country2<-meta.glob.var.country.daily.full.no0%>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=var.WHO,fill=country),stat="identity",width=1)+
+  labs(x=NULL, y="Average sequences available")+
+  scale_y_continuous(expand=c(0,0))+
+  # scale_y_reverse(expand=c(0.01,0))+
+  CountryFillScale+
+  scaleDateFlex+
+  # scaleDateFlex+
+  facet_wrap(~var.WHO,nrow=3, scales="free")
+
+plot.daily.ave.seqs.voc.country2
+ggsave(paste(f.out,"/globAverageDailySequencesBycountry-ByVOC2.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Plot average daily proportion VOC sequences available by country
+```{r}
+#calculate the proportions
+meta.glob.var.country.daily.full22<-meta.glob.var.country.daily.full
+
+#make a summary df for totals for each var.WHO in each day
+meta.glob.var.country.daily.full22.total<-meta.glob.var.country.daily.full22 %>% 
+  dplyr::group_by(var.WHO, date) %>% 
+  dplyr::summarize(.groups="rowwise",total.day=sum(avgtotal_mod))
+
+#bind this new column on to other df
+meta.glob.var.country.daily.full22 <- left_join(meta.glob.var.country.daily.full22,
+                                           meta.glob.var.country.daily.full22.total,
+                                           by=c("date","var.WHO"))
+  
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.glob.var.country.daily.full22<-meta.glob.var.country.daily.full22 %>% mutate(prop=avgtotal_mod/total.day)
+  
+#replace NA and inf with 0
+meta.glob.var.country.daily.full22$prop<-na.replace(meta.glob.var.country.daily.full22$prop,0)
+meta.glob.var.country.daily.full22$var.WHO<-factor(meta.glob.var.country.daily.full22$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full22$country<-factor(meta.glob.var.country.daily.full22$country,levels=ord.country2)
+
+#plot the proportional VOC contribs for each country
+plot.proportion.bycountry.VOC<-meta.glob.var.country.daily.full22 %>% 
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=date,y=prop,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.proportion.bycountry.VOC 
+ggsave(paste(f.out,"/globAverageDailySequencesBycountry_byVOC_proportion.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Plot average daily proportion country by VOC 
+```{r}
+#calculate the proportions
+meta.glob.var.country.daily.full2<-meta.glob.var.country.daily.full
+
+#make a summary df for totals in each country in each day
+meta.glob.var.country.daily.full2.total<-meta.glob.var.country.daily.full2 %>% 
+  dplyr::group_by(country, date) %>% 
+  dplyr::summarize(.groups="rowwise",total.day=sum(avgtotal_mod))
+
+#bind this new column on to other df
+meta.glob.var.country.daily.full2 <- left_join(meta.glob.var.country.daily.full2,
+                                           meta.glob.var.country.daily.full2.total,
+                                           by=c("date","country"))
+  
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.glob.var.country.daily.full2<-meta.glob.var.country.daily.full2 %>% mutate(prop=avgtotal_mod/total.day)
+  
+#replace NA and inf with 0
+meta.glob.var.country.daily.full2$prop<-na.replace(meta.glob.var.country.daily.full2$prop,0)
+meta.glob.var.country.daily.full2$var.WHO<-factor(meta.glob.var.country.daily.full2$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full2$country<-factor(meta.glob.var.country.daily.full2$country,levels=ord.country2)
+
+# which(meta.glob.var.country.daily.full2$prop==NA)
+# which(is.na(meta.glob.var.country.daily.full2$prop))
+```
+
+## Plot proportional VOC contribs for each country
+```{r}
+#plot the proportional VOC contribs for each country
+plot.proportion.VOC.bycountry<-meta.glob.var.country.daily.full2 %>%
+  ggplot( aes(x=date,y=prop,fill=var.WHO))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  VarFillScale2+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~country,nrow=3)
+
+plot.proportion.VOC.bycountry
+ggsave(paste(f.out,"/AverageDailySequencesByVOC_countrys_proportion.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Impute the variant cases by country
+```{r}
+#Impute variant cases by leftjoining daily voc frqs and daily case counts
+# head(meta.glob.var.daily.full2)
+#daily average cases by country
+# head(globalcases$avgtotal_mod)
+
+#reduce glob data
+country.red<-globalcases[,c("date","country","avgtotal_mod")]
+colnames(country.red)<-c("date","country","avgtotal_cases")
+if(any(is.na(country.red$country))){
+  country.red<-country.red[-which(is.na(country.red$country))]
+}
+
+country.red$country<-factor(country.red$country, levels=ord.country2)
+# plot distrib of avgtotal_cases by country
+plot.ave.cases.facetglob<-country.red %>%
+  filter(!is.na(country))%>%
+  ggplot()+
+  labs(x=NULL, y="Average new diagnoses")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        # legend.text=element_text(size=rel(0.8)),
+        # axis.text.x=element_blank(),
+        # axis.ticks.x = element_blank(),
+        plot.margin = margin(1,1,1,1,unit="pt"))+
+  geom_bar(aes(x=date,y=avgtotal_cases,group=country,fill=country),stat="identity",width=1)+
+  scaleDateBusy+
+  CountryFillScale+
+  scale_y_continuous(expand=expansion(add = c(0,0)))+
+  facet_wrap(~country, scales="free_y",nrow=3)
+plot.ave.cases.facetglob
+ggsave(paste(f.out,"/AverageDailyCases_Facetcountrys.png",sep=""), height=4,width=8.5,units="in")
+
+## JOIN THE datasets
+country.red$date<-as.Date(country.red$date)
+meta.glob.var.country.daily.full3<-left_join(meta.glob.var.country.daily.full2, country.red, by=c("date","country"))
+
+#replace NAs with zeroes
+meta.glob.var.country.daily.full3$avgtotal_cases<-na.replace(meta.glob.var.country.daily.full3$avgtotal_cases, 0)
+# head(meta.glob.var.country.daily.full3)
+
+#for days where the sum of prop is zero (no sequences), but cases>0, use the previous non zero proportion
+for (i in 1:length(allcounts)){
+  mycount<-allcounts[i]
+  mydf<-meta.glob.var.country.daily.full3[which(meta.glob.var.country.daily.full3$country==mycount),]
+  for (j in 1:length(alldays)){
+    #if proportions sum to zero, but cases >0, then need to pull prev props from non zero day
+    if(sum(mydf$prop[mydf$date==alldays[j]],na.rm=T)==0 & 
+       sum(mydf$avgtotal_cases[mydf$date==alldays[j]],na.rm=T)>0 &
+       any(mydf$prop[mydf$date<as.Date(alldays[j])]>0)){
+      #find the most recent non-zero prop day
+      k=1
+      while(sum(mydf$prop[mydf$date==alldays[j-k]],na.rm=T)==0){
+        k<-k+1
+      }
+      #alldays[j-k]
+      #now replace it in the original df
+      meta.glob.var.country.daily.full3$prop[which(meta.glob.var.country.daily.full3$country==mycount &
+                                                 meta.glob.var.country.daily.full3$date==alldays[j])] <-mydf$prop[mydf$date==alldays[j-k]]
+    } #end of loop for sum to zero, but cases >0
+  } #end of alldays loop
+} #divs loop
+
+#compute the avgVOC_cases
+meta.glob.var.country.daily.full3<-meta.glob.var.country.daily.full3 %>% mutate(avgVOC_cases = prop * avgtotal_cases)
+meta.glob.var.country.daily.full3$country<-factor(meta.glob.var.country.daily.full3$country, levels=ord.country2)
+
+#write this object! used in a future script
+write.csv(meta.glob.var.country.daily.full3,paste0(f.out,"/meta.glob.var.country.daily.full3.csv"))
+```
+
+## Plot the avgVOC_cases by var.WHO for all of global
+```{r}
+plot.daily.ave.voc.cases.country<-meta.glob.var.country.daily.full3%>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=var.WHO),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  VarFillScale2+
+  scaleDateBusy+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.7,keyheight = 0.7, title="Variant"))+
+  facet_wrap(~country, scales="free_y",nrow=3)
+plot.daily.ave.voc.cases.country
+ggsave(paste(f.out,"/AverageDailyVOCSpecificCases_countrys.png",sep=""), height=4,width=8.5,units="in")
+
+## Plot as above, facetted by VOC, colored by country
+#Plot the avgVOC_cases by var.WHO for all of global
+meta.glob.var.country.daily.full3.no0<-meta.glob.var.country.daily.full3
+removers<-which(meta.glob.var.country.daily.full3.no0$avgVOC_cases==0 |
+                meta.glob.var.country.daily.full3.no0$avgVOC_cases<0.5 |
+                is.na(meta.glob.var.country.daily.full3.no0$avgVOC_cases))
+if(length(removers)>0){meta.glob.var.country.daily.full3.no0<-meta.glob.var.country.daily.full3.no0[-removers,]}
+
+plot.daily.ave.country.cases.voc<-meta.glob.var.country.daily.full3.no0%>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        axis.text.x=element_text(size=rel(0.7)),
+        legend.position="top",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=country),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  CountryFillScale+
+  # scaleDateBusy+
+  scaleDateFlex+
+  facet_wrap(~var.WHO,nrow=3, scales="free")+
+  guides(fill=guide_legend(title="Global Region",title.position = "left", 
+                           keywidth = 0.6,keyheight = 0.6,nrow=3))
+plot.daily.ave.country.cases.voc
+ggsave(paste(f.out,"/AverageDailycountryCases_ByVOC.png",sep=""), height=4,width=8.5,units="in")
+
+plot.daily.ave.country.cases.voc.full<-meta.glob.var.country.daily.full3%>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1)),
+        legend.position="none",
+        plot.margin=margin(1,1,1,1,unit="pt"))+
+        # axis.text.x=element_blank())+
+  geom_bar(aes(x=date,y=avgVOC_cases,fill=country),stat="identity",width=1)+
+  labs(x=NULL, y="Estimated variant cases")+
+  scale_y_continuous(expand=c(0,0))+
+  CountryFillScale+
+  scaleDateBusy+
+  # scaleDateFlex+
+  facet_wrap(~var.WHO,nrow=3, scales="free_y")
+
+plot.daily.ave.country.cases.voc.full
+ggsave(paste(f.out,"/AverageDailycountryCases_ByVOC_fullx.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## plot the daily proportion of each country's contribution to each VOC
+```{r}
+#similar to before, make a summary total for each date and VOC
+meta.glob.var.country.daily.full.p<-meta.glob.var.country.daily.full3
+meta.glob.var.country.daily.full.p.total<-meta.glob.var.country.daily.full.p %>% 
+  dplyr::group_by(var.WHO, date) %>% 
+  dplyr::summarize(.groups="rowwise",totalVOC_cases=sum(avgVOC_cases))
+
+#bind it to a duplicate of the df
+meta.glob.var.country.daily.full.p <- left_join(meta.glob.var.country.daily.full.p,
+                                           meta.glob.var.country.daily.full.p.total,
+                                           by=c("date","var.WHO"))
+ 
+#mutate a proportion
+meta.glob.var.country.daily.full.p<-meta.glob.var.country.daily.full.p %>% mutate(prop=avgVOC_cases/totalVOC_cases)
+meta.glob.var.country.daily.full.p$prop<-na.replace(meta.glob.var.country.daily.full.p$prop,0)
+meta.glob.var.country.daily.full.p$var.WHO<-factor(meta.glob.var.country.daily.full.p$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full.p$country<-factor(meta.glob.var.country.daily.full.p$country,levels=ord.country2)
+
+#plot the proportional country contribs for each VOC
+plot.proportion.country.byVOC<-meta.glob.var.country.daily.full.p %>% 
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=date,y=prop,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+
+plot.proportion.country.byVOC
+ggsave(paste(f.out,"/AverageDailyVOCcasesBycountry_VOCs_proportion.png",sep=""), height=4,width=8.5,units="in")
+
+```
+
+## Plot daily average variant seq representation by country
+```{r}
+meta.glob.var.country.daily.full4<-meta.glob.var.country.daily.full3
+
+meta.glob.var.country.daily.full4<-meta.glob.var.country.daily.full4 %>%
+  mutate(VOCseq_percase = avgtotal_mod / avgVOC_cases)
+
+meta.glob.var.country.daily.full4$var.WHO<-factor(meta.glob.var.country.daily.full4$var.WHO, levels=var.ord)
+meta.glob.var.country.daily.full4$country<-factor(meta.glob.var.country.daily.full4$country, levels=ord.country2)
+
+#plot this over time by country and by VOC
+# meta.glob.var.country.daily.full4.no0<-meta.glob.var.country.daily.full4
+# removers<-which(meta.glob.var.country.daily.full4.no0$VOCseq_percase==0|
+#                   meta.glob.var.country.daily.full4.no0$VOCseq_percase<0.5)
+# if(length(removers)>0){
+#   meta.glob.var.country.daily.full4.no0<-meta.glob.var.country.daily.full4.no0[-removers,]
+# }
+plot.daily.VOCseqrep.bycountry<-meta.glob.var.country.daily.full4 %>%
+  filter(date>as.Date(start.date)) %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_line(aes(x=date,y=VOCseq_percase,color=country))+
+  scaleDateBusy+
+  CountryColScale+
+  theme(legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3, scales="free_y")+
+  pubThemeDate+
+  labs(x=NULL,y="Sequence per case")
+  # scale_y_continuous(limits=c(0,2))
+
+plot.daily.VOCseqrep.bycountry
+ggsave(paste(f.out,"/AverageDailySequenceRep.bycountry.byVOC.png",sep=""),width=8.5, height=4, units="in")  
+
+```
+
+## Plot monthly average variant seq representation by country
+```{r}
+#Add a month column
+alldays<-seq(ymd(first(sort(globalcases$date))),
+    ymd(last(sort(globalcases$date))),
+    by='1 day')
+month.df<-data.frame(date=alldays, month=NA)
+month.df$date<-as.Date(month.df$date)
+month.df$month<-format(month.df$date, "%Y-%m")
+
+#bindit on
+meta.glob.var.country.daily.full3$date<-as.Date(meta.glob.var.country.daily.full3$date)
+meta.glob.var.country.daily.full33<-meta.glob.var.country.daily.full3 %>% left_join(month.df, by="date")
+
+#group by month and sum cases, seqs
+meta.glob.var.country.daily.full.month<-meta.glob.var.country.daily.full33 %>%
+  group_by(country, var.WHO, month) %>%
+  dplyr::summarise(.groups="rowwise",
+                   totalVOCcases=sum(avgVOC_cases,na.rm=T),
+                   totalVOCseqs=sum(avgtotal_mod,na.rm=T))
+
+#calculate seq per case for each month
+meta.glob.var.country.daily.full.month<-meta.glob.var.country.daily.full.month %>% mutate(seq_per_case = totalVOCseqs/ totalVOCcases)
+
+meta.glob.var.country.daily.full.month$var.WHO<-factor(meta.glob.var.country.daily.full.month$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full.month$country<-factor(meta.glob.var.country.daily.full.month$country,levels=ord.country2)
+
+#plot totalVOCcases vs totalVOCseqs
+plot.seq.vs.case.per.month.div.voc<-
+meta.glob.var.country.daily.full.month %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_point(aes(x=totalVOCcases,y=totalVOCseqs,color=country))+
+        geom_smooth(aes(x=(totalVOCcases), y=(totalVOCseqs)),method="glm",se=T,formula=y~x,lwd=0.2,alpha=0.3)+
+  CountryColScale+
+  pubTheme+
+  theme(legend.position="none")+
+  labs(x="Monthly estimated cases",y="Monthly sequences available")+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  guides(color=guide_legend(title="Global Region",title.position = "left", 
+                           keywidth = 0.6,keyheight = 0.6,nrow=3))
+  
+plot.seq.vs.case.per.month.div.voc
+ggsave(paste(f.out,"/monthly.seq_per_case.bycountry.byVOC.png",sep=""),width=8.5, height=4, units="in")  
+
+
+
+
+## as above, log scale
+plot.seq.vs.case.per.month.div.voc.log<-
+meta.glob.var.country.daily.full.month %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_point(aes(x=log10(totalVOCcases),y=log10(totalVOCseqs),color=country))+
+      geom_smooth(aes(x=log10(totalVOCcases), y=log10(totalVOCseqs)),method="glm",se=T,formula=y~x,lwd=0.2,alpha=0.3)+
+  CountryColScale+
+  pubTheme+
+  theme(legend.position="top")+
+  labs(x="log10 Monthly estimated cases",y="log10 Monthly sequences available")+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  guides(color=guide_legend(title="Global Region",title.position = "left", 
+                           keywidth = 0.6,keyheight = 0.6,nrow=3))
+plot.seq.vs.case.per.month.div.voc.log
+ggsave(paste(f.out,"/monthly.seq_per_case.bycountry.byVOC.log.png",sep=""),width=8.5, height=4, units="in")  
+```
+
+## Calculate corr. coef and R^2 from linear model fits and add to plots of seqs vs cases
+```{r}
+#calculate for each VOC
+meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month
+
+#remove any with zero cases
+zero.cases<-which(meta.glob.var.country.daily.full.month.temp$totalVOCcases==0)
+if(length(zero.cases>0)){
+  meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month.temp[-zero.cases,]
+}
+
+df.temp<-meta.glob.var.country.daily.full.month.temp %>% group_by(var.WHO) %>%
+    summarize(pearson=round(cor(x=totalVOCcases,y=totalVOCseqs,method="pearson"),digits = 2),
+          spearman=round(cor(x=totalVOCcases,y=totalVOCseqs,method="spearman"),digits = 2),
+          adj.r2=round(summary(lm(totalVOCseqs~totalVOCcases))$adj.r.squared,digits = 2),
+          y.int=round(lm(totalVOCseqs~totalVOCcases)$coefficients[1],digits = 2),
+          slope=round(lm(totalVOCseqs~totalVOCcases)$coefficients[2],digits = 2))
+#add to the plot by Var.WHO
+meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month %>% 
+  left_join(df.temp, by="var.WHO")
+
+#add a position for the annotation into the df
+meta.glob.var.country.daily.full.month.temp <- meta.glob.var.country.daily.full.month.temp%>%
+  left_join(meta.glob.var.country.daily.full.month.temp %>% group_by(var.WHO) %>%
+  summarize(xpos=min(totalVOCcases,na.rm=T)+2, ypos=max(totalVOCseqs,na.rm=T)),
+  by="var.WHO")
+
+plot.seq.vs.case.per.month.div.voc.cor<-
+meta.glob.var.country.daily.full.month.temp %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot(group=var.WHO)+
+  geom_point(aes(x=totalVOCcases,y=totalVOCseqs,color=country))+
+  # geom_smooth(aes(x=(totalVOCcases), y=(totalVOCseqs)),
+              # method="glm",se=T,formula=y~x,lwd=0.2,alpha=0.3)+
+  CountryColScale+
+  pubTheme+
+  theme(legend.position="top",legend.margin=margin(1,1,1,1,"pt"),
+        legend.text=element_text(size=rel(0.7)),
+        legend.title=element_text(size=rel(0.8)),
+        axis.text.y=element_text(size=rel(0.7)),
+        axis.text.x=element_text(size=rel(0.6),angle=45,hjust=1,vjust=1))+
+  labs(x="Monthly estimated cases",y="Monthly sequences available")+
+  # geom_text(aes(label=as.character(pearson),x=1,y=1))+
+  geom_text(aes(label=paste("r =",pearson,sep=" " ),
+                x=xpos,y=ypos,group=var.WHO),size=rel(2.5),hjust=0,vjust=2)+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  scale_y_continuous(expand=c(0.1,0))
+plot.seq.vs.case.per.month.div.voc.cor
+ggsave(paste(f.out,"/monthly.seq_per_case.bycountry.byVOC.cor.png",sep=""),width=8.5, height=4, units="in")  
+
+## Make a version for the supplementary
+plot_grid(plot.seq.vs.case.per.month.div.voc.cor,labels="A")
+ggsave(paste(f.out,"/monthly.seq_per_case.byCountry.byVOC.cor.A.png",sep=""),width=8.5, height=5.3, units="in")  
+
+
+## export table of correlations
+write.csv(df.temp, paste(f.out,"corr.case.vs.seq.global.pre-samp.csv",sep="/"))
+
+
+### REPEAT FOR THE LOG10 claculations
+# calculate for each VOC
+meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month
+#no zeroes allowed in the correlation calculation
+zero.cases<-which(meta.glob.var.country.daily.full.month.temp$totalVOCcases==0)
+if(length(zero.cases)>0){
+  meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month.temp[-zero.cases,]
+}
+
+#no NAs
+# meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month.temp[
+#   -which(is.na(meta.glob.var.country.daily.full.month.temp$totalVOCcases)),]
+
+meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month.temp %>%
+  mutate(log10.totalVOCcases=log10(totalVOCcases),
+         log10.totalVOCseqs=log10(totalVOCseqs),)
+# which(is.na(meta.glob.var.country.daily.full.month.temp$log10.totalVOCcases))
+# which(is.na(meta.glob.var.country.daily.full.month.temp$log10.totalVOCseqs))
+
+inf.cases<-which(meta.glob.var.country.daily.full.month.temp$log10.totalVOCseqs==-Inf |
+      meta.glob.var.country.daily.full.month.temp$log10.totalVOCcases==-Inf)
+if(length(inf.cases)>0){
+  meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month.temp[-inf.cases,]
+}
+
+#summarize the corrs and lm fit
+df.temp<-meta.glob.var.country.daily.full.month.temp %>% group_by(var.WHO) %>%
+    summarize(pearson=round(cor(x=log10.totalVOCcases,y=log10.totalVOCseqs,method="pearson"),digits = 2),
+          spearman=round(cor(x=log10.totalVOCcases,y=log10.totalVOCseqs,method="spearman"),digits = 2),
+          adj.r2=round(summary(lm(log10.totalVOCseqs~log10.totalVOCcases))$adj.r.squared,digits = 2),
+          y.int=round(lm(log10.totalVOCseqs~log10.totalVOCcases)$coefficients[1],digits = 2),
+          slope=round(lm(log10.totalVOCseqs~log10.totalVOCcases)$coefficients[2],digits = 2))
+#add to the plot by Var.WHO
+meta.glob.var.country.daily.full.month.temp<-meta.glob.var.country.daily.full.month.temp %>% 
+  left_join(df.temp, by="var.WHO")
+
+#add a position for the annotation into the df
+meta.glob.var.country.daily.full.month.temp <- meta.glob.var.country.daily.full.month.temp%>%
+  left_join(meta.glob.var.country.daily.full.month.temp %>% group_by(var.WHO) %>%
+  summarize(xpos=0, ypos=max(log10.totalVOCseqs,na.rm=T)),
+  by="var.WHO")
+
+plot.seq.vs.case.per.month.div.voc.cor<-
+meta.glob.var.country.daily.full.month.temp %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot(group=var.WHO)+
+  geom_point(aes(x=log10.totalVOCcases,y=log10.totalVOCseqs,color=country))+
+  # geom_smooth(aes(x=(log10.totalVOCcases), y=(log10.totalVOCseqs)),
+              # method="glm",se=T,formula=y~x,lwd=0.2,alpha=0.3)+
+  CountryColScale+
+  pubTheme+
+  theme(legend.position="none")+
+  labs(x="log10 Monthly estimated cases",y="log10 Monthly sequences available")+
+  # geom_text(aes(label=as.character(pearson),x=1,y=1))+
+  geom_text(aes(label=paste("r =",pearson,sep=" " ),
+                x=xpos,y=ypos,group=var.WHO),size=rel(2.5),hjust=0,vjust=2)+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  scale_y_continuous(expand=c(0.1,0))
+plot.seq.vs.case.per.month.div.voc.cor
+ggsave(paste(f.out,"/monthly.seq_per_case.bycountry.byVOC.log10.png",sep=""),width=8.5, height=4, units="in")  
+
+write.csv(df.temp, paste(f.out,"corr.case.vs.seq.global.pre-samp.log10.csv",sep="/"))
+```
+
+## plot seq per case over time (by month), facetted by VOC 
+```{r}
+plot.daily.VOCseqrep.bycountry<-meta.glob.var.country.daily.full.month %>%
+  filter(!month %in% c("2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot()+
+  geom_point(aes(x=month,y=seq_per_case,group=var.WHO,color=country),size=1,alpha=0.8)+
+  # scaleDateBusy+
+  CountryColScale+
+  labs(x=NULL,y="Sequence per case")+
+  theme(legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3, scales="free_y")+
+  pubThemeDate+
+  scaleMonthChar
+
+plot.daily.VOCseqrep.bycountry
+ggsave(paste(f.out,"/AverageMonthlyVOCSequenceRep.bycountry.png",sep=""),width=8.5, height=4, units="in")  
+
+```
+
+
+## Calculate the monthly proportion of countries' contributions to estimated variant cases
+```{r}
+## Start with daily estimates of voc-spec cases for each country
+## bin by month and sum
+meta.glob.var.country.daily.full.pm<-meta.glob.var.country.daily.full33 %>% 
+  group_by(var.WHO,country,month) %>%
+  summarize(.groups="rowwise", monthly_VOC_cases=sum(avgVOC_cases,na.rm=T))
+
+## calculate totals for denominator
+meta.glob.var.country.daily.full.pm.total<-meta.glob.var.country.daily.full.pm %>% 
+  dplyr::group_by(var.WHO, month) %>% 
+  dplyr::summarize(.groups="rowwise",total_monthly_VOC_cases=sum(monthly_VOC_cases))
+
+#bind it to a duplicate of the df
+meta.glob.var.country.daily.full.pm <- left_join(meta.glob.var.country.daily.full.pm,
+                                           meta.glob.var.country.daily.full.pm.total,
+                                           by=c("month","var.WHO"))
+ 
+#mutate a proportion
+meta.glob.var.country.daily.full.pm<-meta.glob.var.country.daily.full.pm %>% mutate(prop=monthly_VOC_cases/total_monthly_VOC_cases)
+meta.glob.var.country.daily.full.pm$prop<-na.replace(meta.glob.var.country.daily.full.pm$prop,0)
+meta.glob.var.country.daily.full.pm$var.WHO<-factor(meta.glob.var.country.daily.full.pm$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full.pm$country<-factor(meta.glob.var.country.daily.full.pm$country,levels=ord.country2)
+
+#plot the proportional country contribs for each VOC
+plot.monthly.proportion.country.byVOC<-meta.glob.var.country.daily.full.pm %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=prop,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Monthly proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)+
+  scaleMonthChar
+
+plot.monthly.proportion.country.byVOC
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesBycountry_VOCs_proportion.png",sep=""), height=4,width=8.5,units="in")
+
+#with legend
+plot.monthly.proportion.country.byVOC.leg<-meta.glob.var.country.daily.full.pm %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=prop,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Monthly proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "top",
+         legend.text=element_text(size=rel(0.6)),
+        legend.title = element_text(size=rel(0.8)),
+        legend.margin = margin(1,1,1,1,unit="pt"))+
+  facet_wrap(~var.WHO,nrow=3)+
+  scaleMonthChar+
+  guides(fill=guide_legend(title="Global Region",title.position = "left", 
+                           keywidth = 0.6,keyheight = 0.6,nrow=3))
+
+plot.monthly.proportion.country.byVOC.leg
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesBycountry_VOCs_proportion_leg.png",sep=""), height=4,width=8.5,units="in")
+
+
+#try as a density linked plot
+meta.glob.var.country.daily.full.pm<-meta.glob.var.country.daily.full.pm %>%
+  filter(!is.na(month)) %>% mutate(date.smooth=as.Date(paste0(month,"-01")))
+
+plot.monthly.proportion.country.byVOC.2<-meta.glob.var.country.daily.full.pm %>%
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot(aes(x=date.smooth,y=prop,group=country,fill=country))+
+  geom_density(position="stack",stat="identity",lwd=0)+
+  CountryFillScale+
+  labs(y="Monthly proportion estimated cases",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+plot.monthly.proportion.country.byVOC.2
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesBycountry_VOCs_proportion_density.png",sep=""), height=6,width=8.5,units="in")
+
+## export these values
+write.csv(meta.glob.var.country.daily.full.pm, paste(f.out,"/AverageMonthlyVOCcasesBycountry.csv",sep=""))
+
+#plot counts
+plot.monthly.country.byVOC<-meta.glob.var.country.daily.full.pm %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=monthly_VOC_cases,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Monthly estimated cases",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scaleMonthChar+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")
+
+plot.monthly.country.byVOC
+ggsave(paste(f.out,"/AverageMonthlyVOCcasesBycountry_VOCs_counts.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Calculate the monthly proportion of countries' contributions to VOC sequences
+```{r}
+#calculate the proportions
+meta.glob.var.country.daily.full22m<-meta.glob.var.country.daily.full 
+#add on months
+meta.glob.var.country.daily.full22m<-meta.glob.var.country.daily.full22m %>%left_join(month.df, by="date")
+#tally by months
+meta.glob.var.country.daily.full22m<-meta.glob.var.country.daily.full22m%>% 
+  group_by(var.WHO,country, month) %>%
+  summarize(.groups="rowwise", monthly_VOC_seqs=sum(avgtotal_mod,na.rm=T))
+
+#make a summary df for totals for each var.WHO in each day
+meta.glob.var.country.daily.full22m.total<-meta.glob.var.country.daily.full22m %>% 
+  dplyr::group_by(var.WHO, month) %>% 
+  dplyr::summarize(.groups="rowwise",total_monthly_VOC_seqs=sum(monthly_VOC_seqs))
+
+#bind this new column on to other df
+meta.glob.var.country.daily.full22m <- left_join(meta.glob.var.country.daily.full22m,
+                                           meta.glob.var.country.daily.full22m.total,
+                                           by=c("month","var.WHO"))
+  
+#add a column for proportion of seqs of that VOC compared to total for that date
+meta.glob.var.country.daily.full22m<-meta.glob.var.country.daily.full22m %>% mutate(prop=monthly_VOC_seqs/total_monthly_VOC_seqs)
+  
+#replace NA and inf with 0
+meta.glob.var.country.daily.full22m.nona<-meta.glob.var.country.daily.full22m
+meta.glob.var.country.daily.full22m$prop<-na.replace(meta.glob.var.country.daily.full22m$prop,0)
+meta.glob.var.country.daily.full22m$var.WHO<-factor(meta.glob.var.country.daily.full22m$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full22m$country<-factor(meta.glob.var.country.daily.full22m$country,levels=ord.country2)
+
+#plot the proportional VOC contribs for each country
+plot.monthly.proportion.bycountry.VOC<-meta.glob.var.country.daily.full22m %>% 
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=month,y=prop,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)+
+  scaleMonthChar
+
+plot.monthly.proportion.bycountry.VOC
+ggsave(paste(f.out,"/globAverageMonthlySequencesBycountry_byVOC_proportion.png",sep=""), height=4,width=8.5,units="in")
+
+meta.glob.var.country.daily.full22m <-meta.glob.var.country.daily.full22m %>%
+  filter(!is.na(month))%>%
+  mutate(date.smooth=as.Date(paste(month,"-01",sep="")))
+
+# meta.glob.var.country.daily.full22m.nona<-meta.glob.var.country.daily.full22m
+# meta.glob.var.country.daily.full22m.nona$prop[which(is.na(meta.glob.var.country.daily.full22m.nona$prop))]<-0
+meta.glob.var.country.daily.full22m.nona$var.WHO<-factor(meta.glob.var.country.daily.full22m.nona$var.WHO,levels=var.ord)
+meta.glob.var.country.daily.full22m.nona$country<-factor(meta.glob.var.country.daily.full22m.nona$country,levels=ord.country2)
+meta.glob.var.country.daily.full22m.nona <-meta.glob.var.country.daily.full22m.nona %>%
+  filter(!is.na(month))%>%
+  mutate(date.smooth=as.Date(paste(month,"-01",sep="")))
+
+plot.monthly.proportion.bycountry.VOC.2<-meta.glob.var.country.daily.full22m.nona %>% 
+ filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=date.smooth,y=prop,fill=country,group=country))+
+  geom_density(position="stack",stat="identity",lwd=0)+
+  CountryFillScale+
+  labs(y="Proportion sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3)
+plot.monthly.proportion.bycountry.VOC.2
+ggsave(paste(f.out,"/globAverageMonthlySequencesBycountry_byVOC_proportion_density.png",sep=""), height=4,width=8.5,units="in")
+
+#plot the proportional country contribs for each VOC
+plot.monthly.country.byVOC.2<-meta.glob.var.country.daily.full22m %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=monthly_VOC_seqs,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Monthly sequences available",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3,scales="free")+
+  scaleMonthChar
+
+plot.monthly.country.byVOC.2
+ggsave(paste(f.out,"/AverageMonthlyVOCsequencesBycountry_VOCs_counts.png",sep=""), height=4,width=8.5,units="in")
+
+#plot the proportional country contribs for each VOC
+plot.monthly.country.byVOC.2.full<-meta.glob.var.country.daily.full22m %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  filter(!var.WHO %in% c("Theta","GH/490R","Lambda")) %>%
+  ggplot( aes(x=month,y=monthly_VOC_seqs,fill=country))+
+  geom_bar(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Monthly sequences available",x=NULL)+
+  pubThemeDate+
+  # scaleDateBusy+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "none")+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  scaleMonthChar
+
+plot.monthly.country.byVOC.2.full
+ggsave(paste(f.out,"/AverageMonthlyVOCsequencesBycountry_VOCs_counts_fullx.png",sep=""), height=4,width=8.5,units="in")
+
+
+#full x axis
+plot.monthly.count.bycountry.VOC.full.dens<-meta.glob.var.country.daily.full22m %>% 
+ filter(!month %in% c("2020-01","2020-02","2020-03","2020-04",
+                       "2020-05","2020-06","2020-07",
+                       "2020-08","2020-09","2020-10",NA)) %>%  
+  ggplot( aes(x=date.smooth,y=monthly_VOC_seqs,fill=country))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1,width=1)+
+  CountryFillScale+
+  labs(y="Monthly sequences available",x=NULL)+
+  pubThemeDate+
+  scale_y_continuous(expand=c(0,0))+
+  theme( legend.position = "top")+
+  facet_wrap(~var.WHO,nrow=3,scales="free_y")+
+  scaleDateBusy+
+  guides(fill=guide_legend(title="Global Region",title.position = "left", 
+                           keywidth = 0.6,keyheight = 0.6,nrow=3))
+
+plot.monthly.count.bycountry.VOC.full.dens
+ggsave(paste(f.out,"/globAverageMonthlySequencesBycountry_byVOC_count_fullx_dens.png",sep=""), height=4,width=8.5,units="in")
+```
+
+## Calculate and Plot monthly proportion of cases and seqs contributed by each country (all VOCs together)
+```{r}
+#summarize the rolling average by month and country
+monthly.cases.country<-as.data.frame(globalcases %>% dplyr::group_by(country, month) %>% 
+                                    dplyr::summarize(.groups="rowwise", n.cases=sum(avgtotal_mod) ))
+
+#calculate the proportion of cases in a given month from each country 
+monthly.cases.globalcases$proportion.cases<-NA                                                                      
+for (i in 1:nrow(monthly.cases.country)){
+  monthly.cases.globalcases$proportion.cases[i]<-monthly.cases.globalcases$n.cases[i]/sum(monthly.cases.globalcases$n.cases [monthly.cases.globalcases$month==monthly.cases.globalcases$month[i]])
+}
+
+#check the proportions of cases by country sum to 1 in a given month
+# sum(monthly.cases.globalcases$proportion.cases[monthly.cases.globalcases$month=="2020-06"])
+
+#### Count total and proportion of sequences in global #####
+#Need to calculate number of seqs in each country in each month
+monthly.seqs.country<-meta.glob%>%
+  dplyr::count(month,country) %>% #note this replaces group_by(a,b)%>%summarize(n=n())
+  as.data.frame() 
+colnames(monthly.seqs.country)[3]<-"n.sequence"
+
+#remove any NA
+na.losers<-which(is.na(monthly.seqs.globalcases$month))
+if(length(na.losers>0)){
+  monthly.seqs.country<-monthly.seqs.country[-na.losers,]
+}
+
+#add a column for proportion of seqs that were in that country compared to country
+monthly.seqs.globalcases$proportion.sequence<-NA
+for (i in 1:nrow(monthly.seqs.country)){
+  monthly.seqs.globalcases$proportion.sequence[i]<-monthly.seqs.globalcases$n.sequence[i]/sum(monthly.seqs.globalcases$n.sequence [monthly.seqs.globalcases$month==monthly.seqs.globalcases$month[i]],na.rm = T)
+}
+#check
+# sum(monthly.seqs.globalcases$proportion.sequence[monthly.seqs.globalcases$month=="2021-06"])
+
+#check congruency
+colnames(monthly.cases.country)[1]<-"country"
+#full match if zero
+monthly.seqs.globalcases$country[which(!monthly.seqs.globalcases$country %in% monthly.cases.globalcases$country)] 
+#countrys with cases and no sequences in a given month
+unique(monthly.cases.globalcases$country[which(!monthly.cases.globalcases$country %in% monthly.seqs.globalcases$country )] ) 
+
+#ensure classes match
+which (!monthly.seqs.globalcases$month %in% monthly.cases.globalcases$month) #full match if zero
+monthly.seqs.globalcases$month[which (!monthly.seqs.globalcases$month %in% monthly.cases.globalcases$month)]
+monthly.seqs.country[which (!monthly.seqs.globalcases$month %in% monthly.cases.globalcases$month),]
+
+#do the join based on seqs (restricts to only countrys with seqs)
+monthly.country.cases.seq<-dplyr::left_join( monthly.seqs.country, monthly.cases.country,by=c("country","month") )
+
+# need to put in zero values for early months for all countrys
+# table(monthly.country.cases.seq$month,monthly.country.cases.seq$country)
+monz<-sort(unique(monthly.country.cases.seq$month))
+countryz<-sort(unique(monthly.country.cases.seq$country))
+
+#make an empty df with zero contribs for countrys with no cases
+temp<-table(monthly.country.cases.seq$month,monthly.country.cases.seq$country) %>% as.data.frame()
+temp2<-temp[which(temp$Freq==0),]
+emptydf<-as.data.frame(monthly.country.cases.seq[1:nrow(temp2),])
+emptydf[,c(1:3)]<-temp[which(temp$Freq==0),]
+emptydf[,c(4:ncol(emptydf))]<-0
+
+#add on 
+monthly.country.cases.seq<-rbind(monthly.country.cases.seq, emptydf)
+monthly.country.cases.seq<-monthly.country.cases.seq[with(monthly.country.cases.seq,order(country)),]
+monthly.country.cases.seq$n.cases<-as.numeric(monthly.country.cases.seq$n.cases)
+monthly.country.cases.seq$proportion.cases<-as.numeric(monthly.country.cases.seq$proportion.cases)
+monthly.country.cases.seq$n.sequence<-as.numeric(monthly.country.cases.seq$n.sequence)
+monthly.country.cases.seq$proportion.sequence<-as.numeric(monthly.country.cases.seq$proportion.sequence)
+
+#turn NAs into zeroes
+monthly.country.cases.seq$n.sequence<-na.replace(monthly.country.cases.seq$n.sequence,0)
+monthly.country.cases.seq$n.cases<-na.replace(monthly.country.cases.seq$n.cases,0)
+
+#Calculate a probability of selecting an individual sequence in downsampled dataset
+monthly.country.cases.seq<-monthly.country.cases.seq %>% dplyr::mutate ("probability"=proportion.cases/n.sequence)
+
+#Change any NA probabilities to 0
+monthly.country.cases.seq$proportion.cases<-na.replace(monthly.country.cases.seq$proportion.cases,0)
+monthly.country.cases.seq$probability<-na.replace(monthly.country.cases.seq$probability,0)
+
+na.prob<-which(is.na(monthly.country.cases.seq$probability))
+if(length(na.prob)>0){
+  monthly.country.cases.seq$probability[na.prob]<-0
+}
+
+## Make monthly plots for countrys
+
+## countrys' DENSITY PROPRTIONAL CONTRIBUTIONS for publication
+#change month into a numeric date variable to smoothen
+monthly.country.cases.seq<-monthly.country.cases.seq %>% mutate(date.smooth=as.Date(paste(month,"-01",sep="")))
+
+#order
+monthly.country.cases.seq$country<-factor(monthly.country.cases.seq$country, levels=ord.country2)
+
+plot.monthly.cases<-ggplot(monthly.country.cases.seq, aes(x=date.smooth,y=n.cases,group=country, fill=country))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1)+
+  theme(#legend.position="none",
+    legend.position = c(0.05,0.95),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(-5,-5,-5,-5),
+        legend.justification=c(0,1),
+        legend.background = element_blank())+
+  guides(fill=guide_legend(title.position = "top",keywidth = 0.7,keyheight = 0.7, title="Global region"))+  
+  CountryFillScale+
+  labs(y="Monthly new diagnoses",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  # scale_y_continuous(expand=c(0,0),limits=c(0,205000),breaks=seq(0,200000,50000),labels=c("0","50K","100K","150K","200K"))+
+  theme(panel.background=element_rect("grey95"))
+
+plot.monthly.cases
+ggsave(paste(f.out,"/globalMonthlyCasesBycountryMonth.png",sep=""),width=5,height=5,units="in")
+
+##Repeat with sequence representation before sampling
+plot.seqs.monthly<-ggplot(monthly.country.cases.seq, aes(x=date.smooth,y=n.sequence,group=country, fill=country))+
+  geom_density(position="stack",stat="identity",lwd=0,alpha=1)+
+  theme(legend.position = "none")+
+  CountryFillScale+
+  labs(y="Monthly clean sequences available",x=NULL)+
+  pubThemeDate+
+  scaleDateBusy+
+  # scale_y_continuous(expand=c(0,0),limits=c(0,6650),breaks=seq(0,6000,1000),labels=c("0","1K","2K","3K","4K","5K","6K"))+
+  theme(legend.position = "none",panel.background=element_rect("grey95"))
+
+plot.seqs.monthly
+ggsave(paste(f.out,"/globalMonthlySeqsAvailableBycountryMonthTotal.png",sep=""),width=5,height=4,units="in")
+
+```
+
+## MOD FOR GLOBAL
+## supp fig of estimating provincial variant cases
+```{r}
+plot.daily.ave.seqs.voc.country.noleg<-plot.daily.ave.seqs.voc.country+
+  theme(legend.position = "none")
+
+# plot.proportion.VOC.bycountry.2<-plot.proportion.VOC.bycountry+
+#   facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs)) #B
+# plot.glob.new.diag.prov.2<-plot.glob.new.diag.prov+
+#   facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs)) #C
+# plot.daily.ave.voc.cases.prov.2<-plot.daily.ave.voc.cases.prov+
+#   facet_wrap(~division, scales="free_y", labeller=labeller(division=div.labs))  #D
+glob.var.cases.grob<-plot_grid(plot.daily.ave.seqs.voc.country.noleg,
+                               plot.proportion.VOC.bycountry,
+                               plot.ave.cases.facetglob,
+                               plot.daily.ave.voc.cases.country,
+                               labels=LETTERS[1:4],
+                               nrow=4,align="hv",label_x=0.03)
+## NOW add a legend to the top
+leg2<-get_legend(plot.daily.ave.seqs.voc.glob)
+plot_grid(leg2, glob.var.cases.grob, rel_heights=c(0.1,2),nrow=2)
+ggsave(paste0(f.out,"/FigS7_glob.var.cases.grob.png"),height=11,width=9,units="in")
+```
+
+## supp fig of provincial variant cases, grouped by variant
+```{r}
+plot.daily.ave.seqs.voc.country2.noleg<-plot.daily.ave.seqs.voc.country2+
+  theme(legend.position="none") #A
+plot.daily.ave.country.cases.voc.noleg<-plot.daily.ave.country.cases.voc+
+  theme(legend.position="none")  #C
+plot.monthly.proportion.country.byVOC.noleg<- plot.monthly.proportion.country.byVOC+
+  theme(legend.position="none") #D
+
+glob.var.cases.grob2<-plot_grid(plot.daily.ave.seqs.voc.country2.noleg, 
+                               plot.monthly.proportion.bycountry.VOC,
+                               plot.daily.ave.country.cases.voc.noleg,
+                               plot.monthly.proportion.country.byVOC.noleg,
+                               labels=LETTERS[1:4],
+                               nrow=4,align="hv",axis="rt")
+# prov.var.cases.grob2
+## NOW add a legend to the top
+plot.daily.ave.country.cases.voc.mod<-plot.daily.ave.country.cases.voc+
+    guides(fill=guide_legend(title="Global Region",title.position = "top", 
+                           keywidth = 0.5,keyheight = 0.5,ncol=1))
+  
+leg22<-get_legend(plot.daily.ave.country.cases.voc.mod)
+plot_grid(glob.var.cases.grob2,leg22,  rel_heights=c(1,1),
+          rel_widths=c(2,0.3),nrow=1)
+ggsave(paste0(f.out,"/FigS8_glob.byvar.cases.grob.png"),height=14,width=9,units="in")
+```
+
+
+## PRINT OUT THE CUMULATIVE NUMBER OF estimated cases in each VAR
+```{r}
+total.cases.byvar<-meta.glob.var.country.daily.full3%>%
+  group_by(var.WHO) %>% summarize(totalavgcases=sum(avgVOC_cases,na.rm=T)) %>% as.data.frame()
+
+total.seqs.byvar<-meta.glob %>% group_by(var.WHO) %>%
+  count() %>% as.data.frame()
+
+total.cases.seqs.byvar<-left_join(total.cases.byvar, total.seqs.byvar, by="var.WHO")
+total.cases.seqs.byvar$totalavgcases<-round(total.cases.seqs.byvar$totalavgcases, digits=0)
+total.cases.seqs.byvar<-total.cases.seqs.byvar%>% mutate(seq.prop=n/totalavgcases)
+total.cases.seqs.byvar$seq.prop<-total.cases.seqs.byvar$seq.prop %>% round(digits=3)
+colnames(total.cases.seqs.byvar)<-c("Variant","Estimated.cases","Clean sequences available","Sequence per case")
+# levels(meta.glob.var.daily.full3$var.WHO)
+
+write.csv(total.cases.seqs.byvar,paste0(f.out,"/total.glob.cases.seqs.byvar.csv"))
+```
+
+
+
+

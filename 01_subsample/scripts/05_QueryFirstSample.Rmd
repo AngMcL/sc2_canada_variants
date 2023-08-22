@@ -1,0 +1,182 @@
+---
+title: "Untitled"
+author: "Angela"
+date: '2022-12-09'
+output: html_document
+---
+
+Query the earliest clean global sequence for each variant 
+```{r}
+library(tidyverse)
+library(gtools)
+library(Biostrings)
+library(ape)
+```
+
+```{r}
+case.fold.in<-"Results_PreSubsamp_omi"
+global.meta.in<-paste0(case.fold.in,"/meta.glob.csv")
+canada.meta.in<-paste0(case.fold.in,"/meta.can.csv")
+
+meta.can<-read.csv(canada.meta.in)
+# remove incomp
+meta.can<-meta.can[which(meta.can$incomp==0),]
+wrong<-which(meta.can$date=="2021")
+if(length(wrong)>0){meta.can<-meta.can[-wrong,]}
+meta.glob<-read.csv(global.meta.in)
+
+#split omicron into lineages
+omi.ba1<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.1")
+omi.ba11<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.1.1")
+omi.ba2<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.2")
+omi.ba3<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="BA.3")
+
+meta.glob$var.WHO[omi.ba1]<-"BA.1"
+meta.glob$var.WHO[omi.ba11]<-"BA.1.1"
+meta.glob$var.WHO[omi.ba2]<-"BA.2"
+meta.glob$var.WHO[omi.ba3]<-"BA.3"
+
+#split omicron into lineages
+omi.ba1<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.1")
+omi.ba11<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.1.1")
+omi.ba2<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.2")
+# omi.ba3<-which(meta.can$var.WHO=="Omicron" & meta.can$Lineage=="BA.3")
+
+meta.can$var.WHO[omi.ba1]<-"BA.1"
+meta.can$var.WHO[omi.ba11]<-"BA.1.1"
+meta.can$var.WHO[omi.ba2]<-"BA.2"
+# meta.can$var.WHO[omi.ba3]<-"BA.3"
+
+# table(meta.glob$Lineage[meta.glob$var.WHO=="Omicron"]) #BA.1 BA.1.1   BA.2 and 2 None
+#remove the lineage==none within omicron, n=2
+no.omi<-which(meta.glob$var.WHO=="Omicron" & meta.glob$Lineage=="None")
+if(length(no.omi)>0){
+  meta.glob<-meta.glob[-no.omi,]
+}
+
+
+fold.out<-"FirstSamples/"
+if(!dir.exists(fold.out)){dir.create(fold.out)}
+```
+
+```{r}
+#separate into vars
+vars<-unique(meta.glob$var.WHO)
+var.df<-data.frame(var.WHO=vars,
+                   first.glob.date=as.Date(NA),
+                   first.glob.place=NA)
+for(i in 1:nrow(var.df)){
+  mine<-which(meta.glob$var.WHO==var.df$var.WHO[i])
+  var.df$first.glob.date[i]<-first(sort(meta.glob$date[mine]))
+  this<-which(meta.glob$date[mine]==first(sort(meta.glob$date[mine])))
+  var.df$first.glob.place[i]<-meta.glob$country.og[mine[this]]
+}
+
+var.df<-var.df[with(var.df, order(var.df$first.glob.date)),]
+# var.df
+#query Canada while you're at it
+var.df$first.can.date<-as.Date(NA)
+var.df$first.can.place<-NA
+
+for(i in 1:nrow(var.df)){
+  mine<-which(meta.can$var.WHO==var.df$var.WHO[i])
+  if(length(mine)>1){
+    var.df$first.can.date[i]<-first(sort(meta.can$date[mine]))
+    this<-which(meta.can$date[mine]==first(sort(meta.can$date[mine])))
+    var.df$first.can.place[i]<-meta.can$division[mine[this]]
+  }
+}
+
+write.csv(var.df,paste0(fold.out,"variant.firstglobdate.csv"))
+```
+
+## Extract a meta sample of ten, hunddred samples per variant for a total tree strucutre
+```{r}
+rem.vars<-c("BA.3","Theta","Lambda","GH/490R")
+var.df<-var.df[which(!var.df$var.WHO %in% rem.vars),]
+lim.vars<-var.df$var.WHO
+
+#take first ten sequences from each variant from global meta
+meta.subset.10<-meta.glob[0,]
+meta.subset.100<-meta.glob[0,]
+for (i in 1:length(lim.vars)){
+  mine<-which(meta.glob$var.WHO==lim.vars[i])
+  #sort a subset by date
+  mine.df<-meta.glob[mine,]
+  mine.df<-mine.df[with(mine.df, order(mine.df$date)),]
+  meta.subset.10<-bind_rows(meta.subset.10, mine.df[1:10,]) #take first ten
+  meta.subset.100<-bind_rows(meta.subset.100, mine.df[1:100,])
+}
+
+#write these
+write.csv(meta.subset.10,paste0(fold.out, "first.variants.10.csv"))
+write.csv(meta.subset.100,paste0(fold.out, "first.variants.100.csv"))
+
+## Clear mem
+rm(meta.glob)
+rm(mine.df)
+rm(meta.can)
+```
+
+## Sample these from the alignment
+```{r}
+align.in.folder<-"/Volumes/PhD_2/2022_SC2_Can/20220322_gisaid/00_cleanData/GISAID/sequences/03_cleaner"
+
+align.in.list<-list.files(align.in.folder,full.names = T) %>% mixedsort()
+
+#number of partitions for alignments
+n.P<-length(align.in.list)
+
+#also wuhan-hu-1 separately
+wuh.fas<-"/Volumes/PhD_2/2022_SC2_Can/20220322_gisaid/00_cleanData/GISAID/wuhan-hu-1/EPI_ISL_402125.fasta"
+
+#outputs
+fasta.out.10<-paste0(fold.out, "first.variants.10.fasta")
+fasta.out.100<-paste0(fold.out, "first.variants.100.fasta")
+
+#each one starts with wuhan-hu-1 (part of parent subsampling)
+wu.fas<-readDNAStringSet(wuh.fas)
+for (i in 1:b){
+  writeXStringSet(wu.fas, fasta.out.10,format="fasta",append=F)
+  writeXStringSet(wu.fas, fasta.out.100,format="fasta",append=F)
+}
+
+#go through each partition and find matchy 
+for (k in 1:n.P){ #n.P = number of partitions
+  
+  #Read in the partition
+  print(paste("Reading in ",align.in.list[k],sep=""))
+  align<-readDNAStringSet(align.in.list[k])
+
+  #sample for 10 set
+  print("Sampling and writing for subset.10")
+  align.10<-align [which(names(align) %in% meta.subset.10$new.names)]
+  writeXStringSet(align.10, fasta.out.10, format="fasta",append=T)
+  rm(align.10)
+  
+  #sample for 100 set
+  print("Sampling and writing for subset.100")
+  align.100<-align [which(names(align) %in% meta.subset.100$new.names)]
+  writeXStringSet(align.100, fasta.out.100, format="fasta",append=T)
+  rm(align.100)
+  
+  print("Done sampling for this partition")
+  rm(align)
+} # END Of n.P partition loop
+
+print("Sampling complete")
+#clear the memory
+
+
+##Re-import and export alignments for bootstraps in proper format
+#export  fasta, SLOWWW
+
+print("Re-writing fasta")
+## Workaround to fix the gaps added by Biostrings::writeXstringset
+#read in and overwrite the previous files using the ape commands
+write.FASTA(read.FASTA(fasta.out.10,type = "DNA"), 
+            fasta.out.10[i],append = F)
+write.FASTA(read.FASTA(fasta.out.100,type = "DNA"), 
+            fasta.out.100[i],append = F)
+```
+
