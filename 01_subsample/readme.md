@@ -3,7 +3,7 @@
 ### Ins and Outs
 - Input: cleaned, partitioned alignments + corresponding metadata
 - No GISAID sequences or metadata included here.
-- Output: subsampled alignments and metadata
+- Output: subsampled alignments and metadata, summaries of case and sequence representation before and after subsampling
 
 ### Scripts:
 *00_MergePartitionsSplitCanada.Rmd*
@@ -41,7 +41,7 @@
 
 *06_GenerateEpiSets.Rmd*
 - generate gisaid episet for all the uniquely sampled sequences
-- generate lists of accession IDs sampled in each bootstrap
+- generate lists of accession IDs sampled in each bootstrap - not included in git repo, available upon request
 
 *07_Fig1CasesImports.Rmd*
 - make a nicely formatted fig 1 of cases and importations by variant over time with cartoon phylo
