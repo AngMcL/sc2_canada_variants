@@ -1,0 +1,8 @@
+"","Start.date","End.date","Description","Response.type","Date","position","direction","variant"
+"1",2020-12-20,2021-01-06,"Temporary suspension of flights from the United Kingdom","Variant-specific",2020-12-20,1,1,"Alpha"
+"2",2020-12-24,2021-02-22,"Enhanced screening for people who had travelled to South Africa","Variant-specific",2020-12-24,2,1,"Beta"
+"3",2021-01-15,2021-02-22,"Enhanced screening and quarantine measures for people who had travelled to Brazil","Variant-specific",2021-01-15,3,1,"Gamma"
+"4",2021-03-30,2021-04-14,"Enhanced screening and quarantine measures for people who had travelled to Brazil","Variant-specific",2021-03-30,4,1,"Gamma"
+"5",2021-04-22,2021-09-26,"Temporary suspension of flights from India","Variant-specific",2021-04-22,6,1,"Delta"
+"6",2021-11-26,2021-12-18,"Enhanced screening and quarantine for Canadians and banned
+entry of foreign nationals who had travelled to southern Africa","Variant-specific",2021-11-26,7,1,"Omicron"

@@ -1,0 +1,692 @@
+---
+title: "timeline"
+output: html_document
+---
+
+# Changes
+
+## 2022-12 
+*remove cases over time
+*trim the fat
+*use color scheme for provs from cases
+
+## 2022-06 changes
+* Repeat previous plots with updated info
+* Repeat color scheme
+* Compare different intervention stringency measures
+
+
+```{r}
+library(gtools)
+library(tidyverse)
+library(tidyr)
+library(data.table)
+library(cowplot)
+library(lubridate)
+library(stringr)
+library(ggplot2)
+library(RColorBrewer)
+library(ggplotify)
+library(gridExtra)
+library(grid)
+library(lattice)
+library(reshape2)
+
+```
+
+
+# PLOT CASES OVER TIME IN CANADA colored by prov, with map legend
+## ins and outs
+```{r}
+#inputs 
+# the day of most recent sample
+data.date<-"2022-03-22" 
+start.date<-"2020-11-01" #about when VOCs first started coming to Canada
+
+#provincial case counts
+prov.cases<-read.csv("Canada_cases/20220516_covid19_casesbyprov.csv") #most upddated
+
+#color scheme 
+globalPalette<-read.table("colors_out/global.colors.tsv",sep="\t")
+
+#outputs
+#Folder of images, tables
+today<-Sys.Date()
+f.out<-paste0(today,"_Results/")
+if(!dir.exists(f.out)){dir.create(f.out)}
+
+## make color scheme
+glob.colz<-row.names(globalPalette)
+globalPalette.ch<-as.character(globalPalette$globalPalette)
+names(globalPalette.ch)<-glob.colz
+
+#make scales
+GlobColScale<-scale_colour_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+GlobFillScale<-scale_fill_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+
+#make one only for Can provs and Can itself
+globalPalette.prov<-globalPalette.ch[1:14]
+ProvColScale<-scale_colour_manual(name = "Location",values = globalPalette.prov,na.value="grey60")
+ProvFillScale<-scale_fill_manual(name = "Location",values = globalPalette.prov,na.value="grey60")
+
+#even smaller one for provs with seq data
+globalPalette.prov2<-globalPalette.ch[c(1:9)] #could add Canada here
+ProvColScale2<-scale_colour_manual(name = "Location",values = globalPalette.prov2,na.value="grey60")
+ProvFillScale2<-scale_fill_manual(name = "Location",values = globalPalette.prov2,na.value="grey60")
+
+## plotting theme
+pubThemeDate<-theme(panel.grid.major.y = element_blank(), 
+                    panel.grid.minor = element_blank(),
+                    panel.background = element_rect("grey95"), 
+                    axis.line = element_line(colour = "black"),
+                    text=element_text(size=10,face="bold"),
+                    legend.text=element_text(size=8),
+                    axis.text.x=element_text(angle = 45,hjust=1,size=rel(1)))
+
+scaleDate<-scale_x_date(date_breaks = "1 month", date_minor_breaks = "2 weeks", date_labels = "%b %Y",limits=as.Date(c(start.date,data.date)),expand=c(0,0))
+
+xdates<-ymd(c("2020-12-01","2021-03-01","2021-06-01","2021-09-01","2021-12-01","2022-03-01"))
+scaleDateBusy<-scale_x_date(breaks=xdates, date_labels = "%b %Y",
+                            limits=as.Date(c(start.date,data.date)),
+                            expand=c(0,0))
+
+scaleDateFlex<-scale_x_date(date_labels = "%b %Y",expand=c(0,0))
+
+## Variant colors
+variant.colors.in<-"colors_out/variant_colors.tsv"
+varPalette<-read.table(variant.colors.in,sep="\t")
+
+## make color scheme
+var.colz<-as.character(varPalette$vars.ch)
+varPalette.ch<-row.names(varPalette)
+names(varPalette.ch)<-var.colz
+VOCColScale<-scale_colour_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+VOCFillScale<-scale_fill_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+
+### add separate groups for each omicron group
+omis<-c("BA.1","BA.1.1","BA.2")
+# https://www.colorhexa.com/ec9a91
+omiPalette.ch<-c("#e47266","#e8867b","#f0aea7") 
+names(omiPalette.ch)<-omis
+# morevarPal<-c(varPalette.ch,omiPalette.ch)
+# morevarPal<-morevarPal[-which(names(morevarPal)=="Omicron")]
+
+VarColScale<-scale_colour_manual(name = "Variant",values = omiPalette.ch,na.value=NULL)
+VarFillScale<-scale_fill_manual(name = "Variant",values = omiPalette.ch,na.value=NULL)
+
+
+```
+
+
+## plot of cases over time
+```{r}
+# prov.cases<- prov.cases  %>%
+#   dplyr::filter(prname != "Repatriated travellers")
+# head(prov.cases)
+prov.cases$date<-as.Date(prov.cases$date)
+
+#total sums by 2020-12-31
+tot.df<-prov.cases[prov.cases$date==data.date,]
+prov.ord<-tot.df[with(tot.df,order(tot.df$numtotal,decreasing = T)),c("prname")]
+prov.ord<-prov.ord[-1] #canada
+# prov.ord<-prov.ord[c(1:9,11,10,12:13,14)] #keep maritimes and territories together
+
+#make a modified object
+prov.cases2<-prov.cases
+prov.cases2<-prov.cases2 %>% dplyr::filter(prname != "Canada")
+prov.cases2$prname<-factor(prov.cases2$prname, levels=prov.ord)
+
+#Make a composite that has individual 'numtoday' for observations before rolling average could be calculated
+prov.cases2$avgtotal_mod<-prov.cases2$avgtotal_last7
+for (i in 1:nrow(prov.cases2)){ 
+  #if avg is NA or 0
+  if(is.na(prov.cases2$avgtotal_mod[i]) | prov.cases2$avgtotal_mod[i]==0){
+    #and if number cases today is not NA, use that
+    if(!is.na(prov.cases2$numtoday[i])){
+      prov.cases2$avgtotal_mod[i]<-prov.cases2$numtoday[i]
+    }
+  }
+  }
+
+
+p2<-prov.cases2 %>%
+  ggplot()+
+  geom_bar(aes(x=date,y=avgtotal_mod,group=prname,fill=prname),stat="identity",width=1)+
+  labs(x=NULL, y="Average daily new diagnoses*")+
+  pubThemeDate+
+  theme(axis.title.y=element_text(size=rel(1.25),face="bold"),
+        # legend.position=c(0.25,0.7),
+        legend.position = "none",
+        legend.text=element_text(size=rel(0.9)))+
+  scaleDateBusy+
+  ProvFillScale
+  # guides(fill=guide_legend(title="Province",title.position = "top", 
+  #                          keywidth = 1,keyheight = 1,ncol=2))+
+  # annotate(geom="text",x=as.Date("2021-01-01"),y=8400,
+  #            label="Second wave",size=2,fontface="italic",hjust=0,vjust=0,color="black")+
+  # annotate(geom="text",x=as.Date("2021-03-30"),y=8600,
+  #            label="Third wave",size=2,fontface="italic",hjust=0,vjust=0,color="black")+
+  # annotate(geom="text",x=as.Date("2021-08-25"),y=4900,
+  #            label="Fourth wave",size=2,fontface="italic",hjust=0,vjust=0,color="black")+
+  # annotate(geom="text",x=as.Date("2021-12-05"),y=42300,
+  #            label="Fifth wave",size=2,fontface="italic",hjust=0,vjust=0,color="black")
+# p2
+
+# print it with the Canada legend
+ggdraw() +  
+  draw_plot(p2) 
+  # draw_plot(p.map,scale=0.32,halign = 0.25,valign=0.99)
+  # draw_image("../../20210301_phylogeo/01_subSample/Results/PlainMap_GlobalPalette.png",
+             # scale=0.71,halign = 0.46,valign=0.91)
+ggsave(paste0(f.out,"AvgDailyDiagnosesByProv.png"),width=5,height=3)
+```
+
+
+# STRINGENCY
+##ins and outs
+```{r}
+#read in stringency for oxford
+ox<-read.csv("oxford-tracker/OxCGRT_latest.csv") #one row a day
+# head(ox)
+colnames(ox)
+ox.can<-ox[which(ox$CountryName=="Canada"),c("Date","CountryName","RegionName","StringencyIndex")]
+# table(ox.can$RegionName) #one per province and one unlabelled (all canada presume)
+ox.can$RegionName[ which(ox.can$RegionName=="")]<-"Canada"
+
+#convert dates
+ox.can$Date<-as.Date(as.character(ox.can$Date),format="%Y%m%d")
+# head(ox.can) 
+
+y.lim<-c(15,95)
+#PLOT ER UP
+ggplot(ox.can)+
+  geom_line(aes(x=Date,y=StringencyIndex,group=RegionName,color=RegionName))+
+  ProvColScale+
+  pubThemeDate+
+ scaleDate+
+   theme(legend.position = "right",
+        legend.text=element_text(size=rel(0.6)),
+        legend.title=element_text(size=rel(0.7)))+
+  labs(x=NULL,y="Oxford Stringency Index")+
+  scale_y_continuous(limits=y.lim, expand = c(0,0))+
+  guides(color=guide_legend(title="Province or\nterritory",title.position = "top",
+                           keywidth = 0.5,keyheight = 0.5,ncol=1))+
+  scaleDateBusy
+
+ggsave(paste0(f.out,"Oxford Stringency Index over time_AllProvs.png"),height=2.5,width=5,units = "in")
+
+#only provs with data and order high to low stringency (which had the lowest)
+maxstring<-ox.can %>%  
+  dplyr::filter(Date <data.date) %>%
+  dplyr::filter(Date >start.date) %>%
+  dplyr::group_by(RegionName) %>% 
+  dplyr::summarise(.groups="rowwise",
+                  meanStringency=mean(StringencyIndex,na.rm=T),
+                  minStringency=min(StringencyIndex,na.rm=T),
+                  maxStringency=max(StringencyIndex,na.rm=T)) %>% as.data.frame()
+maxstring<-maxstring[order(maxstring$meanStringency,decreasing = T),]
+prov.ord.st<-maxstring$RegionName
+ox.can$RegionName<-factor(ox.can$RegionName, levels=prov.ord.st)
+
+prov.ord.st2<-prov.ord.st[which(prov.ord.st %in% names(globalPalette.prov2))]
+ProvColScale3<-scale_colour_manual(name = "Location",
+                                   values = globalPalette.prov2[match(prov.ord.st2,names(globalPalette.prov2))],
+                                   na.value=NULL)
+
+ox.can %>%
+  dplyr::filter(RegionName %in% names(globalPalette.prov2)) %>%
+  ggplot()+
+  geom_line(aes(x=Date,y=StringencyIndex,group=RegionName,color=RegionName))+
+  ProvColScale3+
+  pubThemeDate+
+   theme(legend.position = "right",
+        legend.text=element_text(size=rel(0.6)),
+        legend.title=element_text(size=rel(0.7)))+
+  labs(x=NULL,y="Oxford Stringency Index")+
+  scale_y_continuous(limits=y.lim, expand = c(0,0))+
+  guides(color=guide_legend(title="Province",title.position = "top",
+                           keywidth = 0.5,keyheight = 0.5,ncol=1))+
+  scaleDateBusy
+
+ggsave(paste0(f.out,"Oxford Stringency Index over time_SelectProvsCanada.png"),height=2.5,width=5,units = "in")
+
+```
+
+## Calculate deviation from mean by day
+```{r}
+#separate canada
+ox.canada<-ox.can[ox.can$RegionName=="Canada",c(1,4)]
+colnames(ox.canada)[2]<-paste0("Canada_",colnames(ox.canada)[2])
+
+#make a restricted version of this
+ox.can.dev<- ox.can %>%   
+  dplyr::filter(Date <data.date) %>%
+  dplyr::filter(Date >start.date) %>% 
+  dplyr::filter(RegionName!="Canada")
+ox.can.dev.mean<-ox.can.dev %>% dplyr::group_by(Date) %>% dplyr::summarize(meanStringency=mean(StringencyIndex)) %>%
+  as.data.frame()
+
+#join on canada by day
+ox.can.dev<-ox.can.dev %>% dplyr::left_join(ox.canada, by="Date") %>%
+  dplyr::left_join(ox.can.dev.mean, by="Date")
+
+#calculate deviation from the Canadian stringency
+#as a deviance or variance and as a % coeffiient of var (normalized to mean *100)
+ox.can.dev<-ox.can.dev %>% 
+  dplyr::mutate(dev_string=StringencyIndex-meanStringency) %>% #if positive then prov string higher, if negative than less stringent than Canada
+  dplyr::mutate(coeff_var_string=(sqrt(abs(dev_string))/meanStringency)*100) 
+
+#Plot the deviances and coeff of var over time
+ox.can.dev %>%
+  dplyr::filter(RegionName %in% names(globalPalette.prov2))%>%
+  ggplot()+
+  geom_line(aes(x=Date,y=dev_string,group=RegionName,color=RegionName))+
+  ProvColScale3+
+  pubThemeDate+
+   theme(legend.position = "none",
+        legend.text=element_text(size=rel(0.6)),
+        legend.title=element_text(size=rel(0.7)))+
+  labs(x=NULL,y="Stringency residuals")+
+  scale_y_continuous(expand = c(0,0))+
+  guides(color=guide_legend(title="Province",title.position = "top",
+                           keywidth = 0.5,keyheight = 0.5,ncol=1))+
+  scaleDateBusy
+ggsave(paste0(f.out,"OxfordString_Residuals_SelectProvsCanada_noleg.png"),height=2.5,width=4,units = "in")
+
+ox.can.dev %>%
+  dplyr::filter(RegionName %in% names(globalPalette.prov2))%>%
+  ggplot()+
+  geom_line(aes(x=Date,y=coeff_var_string,group=RegionName,color=RegionName))+
+  ProvColScale3+
+  pubThemeDate+
+   theme(legend.position = "right",
+        legend.text=element_text(size=rel(0.6)),
+        legend.title=element_text(size=rel(0.7)))+
+  labs(x=NULL,y="%CV stringency")+
+  scale_y_continuous(expand = c(0,0))+
+  guides(color=guide_legend(title="Province",title.position = "top",
+                           keywidth = 0.5,keyheight = 0.5,ncol=1))+
+  scaleDateBusy
+ggsave(paste0(f.out,"OxfordString_NormalDeviance_SelectProvsCanada.png"),height=2.5,width=5,units = "in")
+
+#daily binary of above or below average
+ox.can.dev<-ox.can.dev %>% 
+  dplyr::mutate(binaryString=(dev_string<0))
+
+## summary statistics 
+ox.can.summary<-ox.can.dev %>%
+  # dplyr::filter(RegionName %in% names(globalPalette.prov2))%>%
+  dplyr::group_by(RegionName)%>%
+  dplyr::summarise(meanString=mean(StringencyIndex,na.rm=T),
+                   medianString=median(StringencyIndex,na.rm=T),
+                   maxString=max(StringencyIndex,na.rm=T),
+                   minString=min(StringencyIndex,na.rm=T),
+                   #variation of variance
+                   meanStringVar=mean(dev_string,na.rm=T),
+                   medianStringVar=median(dev_string,na.rm=T),
+                   maxStringVar=max(dev_string,na.rm=T),
+                   minStringVar=min(dev_string,na.rm=T),
+              
+                   meanCV=mean(coeff_var_string,na.rm=T),
+                   medianCV=median(coeff_var_string,na.rm=T),
+                   maxCV=max(coeff_var_string,na.rm=T),
+                   minCV=min(coeff_var_string,na.rm=T),
+                   
+                   #how often above or below mean
+                   sumAbove=sum(which(binaryString==F)),
+                   sumBelow=sum(which(binaryString==T)) ) %>%
+  dplyr::mutate((percAbove=sumAbove/sum(sumAbove,sumBelow) )*100,
+                  (percBelow=sumBelow/sum(sumAbove,sumBelow) )*100)
+
+write.csv(ox.can.summary,paste0(f.out,"OxfordStringenceResidualSummary.csv"))
+```
+
+## Compare Oxford stringency to Bank of Canada data - more local considerations
+```{r}
+#read in 
+boc<-read.csv("bank-of-canada/COVID-19_STRINGENCY_INDEX-form.csv")
+#go from wide to long for all the regions
+boc.long<-boc %>% pivot_longer(cols=2:ncol(boc))
+colnames(boc.long)<-c("Date","RegionName","StringencyIndex")
+boc.long$RegionName<-str_replace_all(boc.long$RegionName, "\\.", " ")
+
+#merge with oxford
+boc.long$method<-"boc"
+ox.can$method<-"oxford"
+boc.long$Date<-as.Date(boc.long$Date)
+#remove these regions
+boc.long<-boc.long %>%   
+  dplyr::filter(!RegionName %in% c("Atlantic region ","Prairies region ")) 
+
+all.string<-bind_rows(ox.can[,c(colnames(boc.long))],
+                      boc.long)
+head(all.string)
+
+#plot together for provs
+all.string %>% 
+  # filter(RegionName=="Canada") %>%
+  ggplot()+
+  geom_line(aes(x=Date,y=StringencyIndex,group=method, color=method))+
+  theme(legend.position = "right",
+        legend.text=element_text(size=1))+
+  pubThemeDate+
+ scaleDate+
+  labs(x=NULL,y="Stringency Index")+
+  scale_y_continuous(limits=y.lim, expand = c(0,0))+
+  facet_wrap(~RegionName,nrow=3)+
+  guides(color=guide_legend(title="Index",title.position = "top",
+                           keywidth = 0.5,keyheight = 1,ncol=1))+
+  scaleDateBusy
+ggsave(paste0(f.out,"StringencyIndex_BOCvsOX_Comparison.png"),width=8.5,height=5,units="in")
+
+
+```
+
+## Plot stringency by prov in one plot for the Bank of Canada data
+```{r}
+#order it by mean stringency
+meanstring.boc<-boc.long %>%   
+  dplyr::group_by(RegionName) %>% 
+  dplyr::summarise(.groups="rowwise",
+                   meanstring.bocency=mean(StringencyIndex,na.rm=T)) %>% as.data.frame()
+meanstring.boc<-meanstring.boc[order(meanstring.boc$meanstring.bocency,decreasing = T),]
+prov.ord.st<-meanstring.boc$RegionName
+#order it nicely
+# prov.ord2<-c("Canada",prov.ord)
+# prov.ord2<-prov.ord2[-which(prov.ord2=="Repatriated travellers")]
+boc.long$RegionName<-factor(boc.long$RegionName, levels=prov.ord.st)
+
+ProvColorScale2<-scale_color_manual(name = "Location",
+                                    values = rev( colorRampPalette(
+                                      brewer.pal(name="YlOrRd",n=9))
+                                      (length(prov.ord.st))))
+max(boc.long$StringencyIndex,na.rm=T)
+y.lim<-c(0,85)
+#PLOT ER UP
+boc.long %>%
+  dplyr::filter(RegionName %in% names(globalPalette.prov2))%>%
+  ggplot()+
+  # #annotate the background
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #          ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  # annotate(geom="text",x = as.Date("2021-05-30"),y=y.lim[2], vjust=1, hjust=0,
+  #          label="Flight ban",fontface="italic",color="grey25",size=3)+
+  geom_line(aes(x=Date,y=StringencyIndex,group=RegionName,color=RegionName))+
+  theme(legend.position = "right",
+        legend.text=element_text(size=1))+
+  ProvColScale3+
+  pubThemeDate+
+ scaleDate+
+  labs(x=NULL,y="Bank of Canada Stringency Index")+
+  scale_y_continuous(limits=y.lim, expand = c(0,0))+
+  guides(color=guide_legend(title="Province",title.position = "top",
+                           keywidth = 0.5,keyheight = 1,ncol=1))+
+  scaleDateBusy
+
+ggsave(paste0(f.out,"BankofCan Stringency Index over time_ProvsCanada_2021.png"),height=3,width=6,units="in")
+```
+
+## Look at the IRPP data
+```{r}
+irpp<-read.csv("IRPP/Canada-COVID19-Strengency_IRPP.csv")
+head(irpp)
+irpp<-irpp[,c("Province.Territory","date","stringencyIndex")] #look at more columsn another time
+colnames(irpp)<-c("RegionName","Date","StringencyIndex")
+irpp$method<-"irpp"
+
+#Merge onto the all string object
+irpp$Date<-as.Date(irpp$Date)
+all.string2<-bind_rows(all.string,irpp)
+
+#Plot comparison again
+#plot together for provs
+y.lim<-c(0,95)
+
+all.string2 %>% 
+  # filter(RegionName=="Canada") %>%
+  ggplot()+
+  geom_line(aes(x=Date,y=StringencyIndex,group=method, color=method))+
+  theme(legend.position = "right",
+        legend.text=element_text(size=1),
+        strip.text.x= element_text(size=rel(0.8))
+        )+
+  pubThemeDate+
+ scaleDate+
+  labs(x=NULL,y="Stringency Index")+
+  scale_y_continuous(limits=y.lim, expand = c(0,0))+
+  facet_wrap(~RegionName,nrow=3)+
+  guides(color=guide_legend(title="Index",title.position = "top",
+                           keywidth = 0.5,keyheight = 1,ncol=1))+
+  scaleDateBusy
+ggsave(paste0(f.out,"StringencyIndex_OXvsBOCvsIRPP_comparison.png"),width=8,height=5,units="in")
+
+```
+
+## Plot comparison across provs using IRPP
+```{r}
+#order it by mean stringency
+meanstring.irpp<-irpp %>%   
+  dplyr::group_by(RegionName) %>% 
+  dplyr::summarise(.groups="rowwise",
+                   meanstring.irppency=mean(StringencyIndex,na.rm=T)) %>% as.data.frame()
+meanstring.irpp<-meanstring.irpp[order(meanstring.irpp$meanstring.irppency,decreasing = T),]
+prov.ord.st<-meanstring.irpp$RegionName
+#order it nicely
+# prov.ord2<-c("Canada",prov.ord)
+# prov.ord2<-prov.ord2[-which(prov.ord2=="Repatriated travellers")]
+irpp$RegionName<-factor(irpp$RegionName, levels=prov.ord.st)
+
+ProvColorScale2<-scale_color_manual(name = "Location",
+                                    values = rev( colorRampPalette(
+                                      brewer.pal(name="YlOrRd",n=9))
+                                      (length(prov.ord.st))))
+max(irpp$StringencyIndex,na.rm=T)
+y.lim<-c(-5,95)
+#PLOT ER UP
+irpp %>%
+  dplyr::filter(RegionName %in% names(globalPalette.prov2))%>%
+  ggplot()+
+  #annotate the background
+  # annotate(geom="rect",xmin = as.Date("2021-04-22"), xmax = as.Date("2021-09-26"),
+  #          ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  # annotate(geom="text",x = as.Date("2021-05-30"),y=y.lim[2], vjust=1, hjust=0,
+  #          label="Flight ban",fontface="italic",color="grey25",size=3)+
+  
+  geom_line(aes(x=Date,y=StringencyIndex,group=RegionName,color=RegionName))+
+  ProvColScale3+
+  pubThemeDate+
+ scaleDate+
+   theme(legend.position = "right",
+        legend.text=element_text(size=rel(0.6)),
+        legend.title=element_text(size=rel(0.7)))+
+  labs(x=NULL,y="IRPP Stringency Index")+
+  scale_y_continuous(limits=y.lim, expand = c(0,0))+
+  guides(color=guide_legend(title="Province",title.position = "top",
+                           keywidth = 0.5,keyheight = 0.5,ncol=1))+
+  scaleDateBusy
+
+ggsave(paste0(f.out,"IRPP Stringency Index over time_ProvsCanada_2021_sml.png"),height=3,width=5,units = "in")
+```
+
+# OLD from 2020 analysis
+
+## Look at change in string
+```{r}
+#make a column for daily change
+ox.can$StringencyIndex.change<-NA
+for (i in 1:nrow(ox.can)){
+  if (i>1){
+      ox.can$StringencyIndex.change[i]<-ox.can$StringencyIndex[i]-ox.can$StringencyIndex[i-1]
+  }
+}
+
+#biggest change 
+ox.can$Date [which(ox.can$StringencyIndex.change==max(ox.can$StringencyIndex.change,na.rm = T))] #"2020-03-17"
+max(ox.can$StringencyIndex,na.rm = T) #90.74
+
+#biggest change in 2021
+ox.can2021<-ox.can[ox.can$Date > as.Date("2020-12-31"),]
+ox.can2021$Date [which(ox.can2021$StringencyIndex.change==max(ox.can2021$StringencyIndex.change,na.rm = T))] #""2021-12-30"
+
+max(ox.can$StringencyIndex,na.rm = T)
+```
+
+## Read in custom timeline 
+```{r}
+varevents<-read.csv(paste0("2023-02-02_Results/KeyVariantEvents2022.csv"))
+# head(varevents)
+varevents<-varevents[-which(varevents$Response.type=="Contextual event"),]
+varevents$Date<-varevents$Start.date
+
+positions<-seq(0,nrow(varevents), by=1)
+directions <- c(1, 1)
+line_pos <- data.frame(
+    "position"=rep(positions, length.out=nrow(varevents)),
+    "direction"=rep(directions, length.out=nrow(varevents)))
+
+#sort var events byd ate
+varevents<-varevents[with(varevents,order(varevents$Date)),]
+#bind
+can.3 <- bind_cols(varevents,line_pos)
+can.3$Date<-as.Date(can.3$Date)
+#better colors
+# unique(varevents$Response.type) 
+respcolz<-c("sienna","darkorange1","royalblue3")
+
+p1<-ggplot()+
+  labs(x=NULL,y=NULL)+
+  #description and lines to axis
+  geom_segment(data=can.3,aes(y=position,yend=-1, 
+                              x=Date,xend=Date), #,color=Intervention.Category
+               size=0.2,alpha=0.2)+
+  geom_text(data=can.3,aes(x=Date,label=Description,y=position, color=Response.type), fontface="bold", size=2.4,hjust=0)+ 
+  pubThemeDate+
+  theme(axis.text.y=element_blank(),
+        legend.position=c(0.1,0.8),
+        axis.ticks.y=element_blank())+
+  scale_x_date(breaks=xdates, date_labels = "%b %Y",
+                            limits=as.Date(c(start.date,data.date)),
+                            expand=expansion(add=c(0,370)))+  
+  coord_cartesian(ylim=c(-1,nrow(varevents)))+
+  scale_color_manual(values=respcolz)+
+  scale_y_continuous(expand = expansion(add=c(0, 0)))+
+  guides(color=guide_legend(title = "Federal\nCOVID-19\ninterventions"))
+
+p1
+ggsave(paste0(f.out,"Canada-intervention-timeline.png"),height=4.5,width=9.6,units="in")
+
+```
+
+## Make a simple version with only variant specific interventions
+```{r}
+can.var<-can.3  %>% dplyr::filter(Response.type=="Variant-specific")
+
+can.var$Start.date<-as.Date(can.var$Start.date)
+can.var$End.date<-as.Date(can.var$End.date)
+can.var$Description[nrow(can.var)]<-  "Enhanced screening and quarantine for Canadians and banned\nentry of foreign nationals who had travelled to southern Africa"
+#remove redundant
+can.var2<-can.var[-(nrow(can.var)-1),]
+can.var2$position<-1:nrow(can.var2)
+can.var2$variant<-c("Alpha","Beta","Gamma","Gamma","Delta","Delta","Omicron")
+
+#option to remove the ban against pakistan b/c not testing that
+can.var2<-can.var2 %>%
+  filter(End.date != as.Date("2021-06-08")) #filter out pakistan for summary
+
+#save these
+write.csv(can.var2,file=paste0(f.out,"can.variant.interv.plotty2.csv"))
+
+#make y positions (same for two gamma interventions)
+can.var2$position<-c(1,2,3,3,4,5)
+# can.var2$position<-1:nrow(can.var2)
+
+#remove redundant text for two gamma interves
+can.var2$Description[3]<-NA
+can.var2$variant2<-can.var2$variant #duplicate
+can.var2$variant2[4]<-NA
+# can.var2$variant[3]<-NA #need this text 
+# head(can.var)
+p2<-can.var2 %>%
+  ggplot()+
+  labs(x=NULL,y=NULL)+
+  #description and lines to axis
+  geom_segment(aes(y=position,yend=position, 
+                              x=Start.date,xend=End.date,color=variant),
+               size=3,alpha=1)+
+  geom_text(aes(x=End.date+2,label=Description,y=position), fontface="bold", size=3,hjust=0)+ 
+  geom_text(aes(x=Start.date-1,label=variant2,y=position), fontface="bold", size=4.5,hjust=1)+ 
+  pubThemeDate+
+  theme(axis.text.x=element_text(angle=0,hjust=0.5,size=9),
+        axis.text.y=element_blank(),
+        legend.position="none",
+        axis.ticks.y=element_blank())+
+  scale_x_date(breaks=xdates, date_labels = "%b %Y",
+                            limits=c(as.Date(start.date)+11, as.Date(data.date)),
+                            expand=expansion(add=c(14,260)))+  
+  coord_cartesian(ylim=c(0.1,nrow(can.var2)))+
+  scale_color_manual(values=respcolz)+
+  scale_y_continuous(expand = expansion(add=c(0, 0)))+
+  VOCColScale+
+  #add annotation for restr1 and 2 for gamma
+  annotate(geom="text",x=can.var2$Start.date[3],y=can.var2$position[3],
+           label="restr.1",size=2.5,hjust=-.25,vjust=-1)+
+  annotate(geom="text",x=can.var2$Start.date[4],y=can.var2$position[4],
+           label="restr.2",size=2.5,hjust=.15,vjust=-1)
+
+p2
+ggsave(paste0(f.out,"Canada-variant-intervention-timeline.png"),height=1.7,width=8,units="in")
+
+```
+
+## Cartoon phylo
+```{r}
+variant.df.in<-paste0("colors_out/variant.df.can.csv")
+
+## read in the variant df to use for inputs
+var.df<-read.csv(variant.df.in)
+var.df<-var.df[with(var.df, order(var.df$first.glob.date, decreasing = F)),]
+excl.var<-c("Theta","Lambda","GH/490R","Other")
+var.df<-var.df %>% dplyr::filter(!var.WHO %in% excl.var)
+# var.df$var.WHO
+var.df.phylo.order<-c("Beta","Epsilon","Eta","Iota","Mu","Kappa","Delta","Alpha","Gamma","Zeta","Omicron")
+var.df$var.WHO<-factor(var.df$var.WHO, var.df.phylo.order)
+var.df<-var.df[match(var.df.phylo.order,var.df$var.WHO),]
+var.df$order<-1:nrow(var.df)
+var.df$first.glob.date<-as.Date(var.df$first.glob.date)
+var.df$first.can.date<-as.Date(var.df$first.can.date)
+
+VOCColScale2<-scale_colour_manual(name = "Variant",values = varPalette.ch[which(names(varPalette.ch) %in% var.df.phylo.order)],na.value=NULL)
+VOCFillScale2<-scale_fill_manual(name = "Variant",values = varPalette.ch[which(names(varPalette.ch) %in% var.df.phylo.order)],na.value=NULL)
+
+
+
+# var.df$var.WHO<-factor(var.df$var.WHO,levels=var.ord)
+# var.df
+## RELAYY NEED TO CHECK THESE DATES
+
+#delta missing first Can Date
+
+var.df %>%
+  ggplot()+
+  geom_point(aes(x=first.can.date,y=order,color=var.WHO),size=6)+
+  geom_text(aes(label=var.WHO,x=(first.can.date+10),y=order,color=var.WHO),hjust=-0.1)+
+  VOCColScale2+
+  theme(axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        legend.position = "none")+
+    pubThemeDate+
+  scaleDateFlex
+ggsave(paste0(f.out,"firstVariantDetectionCanada.png"),height=5,width=5,units="in")
+
+```
+
+
+## make a composite plot
+```{r}
+plot_grid(p1,p2,align="v",nrow=2,rel_heights = c(0.4,0.1), labels=c("A","B"))
+ggsave(paste0(f.out,"composite_InterventionsAndCases.png"),height=7,width=8.5,units="in")
+```
+
+### Want to add the clean Canadian sequences available over time with inferred dates
+Also make a supplemental figure with the subsampling strategies and by lineage
+DO THIS in the subsamp folder, easier to pick upthis whole script and plop in there to make a composite figure
