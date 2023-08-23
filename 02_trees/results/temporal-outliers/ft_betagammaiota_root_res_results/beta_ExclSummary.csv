@@ -1,0 +1,11 @@
+"trees","ntip.start","modelfit.start","R2.start","BOOT","cutoff","Ntip.residual.out","modelfit.excl.resid.out","R2.excl.resid.out","max.muts","Ntip.pendant.out","modelfit.end","R2.end"
+"202208_analysis/ft_betagammaiota_root/beta_1_mask_root.tre",26424,"y = 5.97e-04 x + -1.21",0.27,"beta_1",0.001,16,"y = 6.04e-04 x + -1.22",0.342,30,1,"y = 6.04e-04 x + -1.22",0.342
+"202208_analysis/ft_betagammaiota_root/beta_2_mask_root.tre",26424,"y = 6.56e-04 x + -1.32",0.276,"beta_2",0.001,18,"y = 6.61e-04 x + -1.34",0.334,30,1,"y = 6.61e-04 x + -1.33",0.334
+"202208_analysis/ft_betagammaiota_root/beta_3_mask_root.tre",26424,"y = 6.14e-04 x + -1.24",0.277,"beta_3",0.001,17,"y = 6.20e-04 x + -1.25",0.332,30,0,"y = 6.20e-04 x + -1.25",0.332
+"202208_analysis/ft_betagammaiota_root/beta_4_mask_root.tre",26424,"y = 5.96e-04 x + -1.2",0.237,"beta_4",0.001,61,"y = 6.06e-04 x + -1.22",0.305,30,0,"y = 6.06e-04 x + -1.22",0.305
+"202208_analysis/ft_betagammaiota_root/beta_5_mask_root.tre",26424,"y = 5.71e-04 x + -1.15",0.197,"beta_5",0.001,109,"y = 5.77e-04 x + -1.17",0.245,30,1,"y = 5.77e-04 x + -1.17",0.245
+"202208_analysis/ft_betagammaiota_root/beta_6_mask_root.tre",26424,"y = 6.30e-04 x + -1.27",0.243,"beta_6",0.001,74,"y = 6.38e-04 x + -1.29",0.314,30,0,"y = 6.38e-04 x + -1.29",0.314
+"202208_analysis/ft_betagammaiota_root/beta_7_mask_root.tre",26424,"y = 6.51e-04 x + -1.32",0.286,"beta_7",0.001,20,"y = 6.58e-04 x + -1.33",0.352,30,0,"y = 6.58e-04 x + -1.33",0.352
+"202208_analysis/ft_betagammaiota_root/beta_8_mask_root.tre",26424,"y = 6.13e-04 x + -1.24",0.224,"beta_8",0.001,85,"y = 6.21e-04 x + -1.25",0.287,30,1,"y = 6.21e-04 x + -1.25",0.287
+"202208_analysis/ft_betagammaiota_root/beta_9_mask_root.tre",26424,"y = 6.38e-04 x + -1.29",0.319,"beta_9",0.001,20,"y = 6.43e-04 x + -1.3",0.415,30,1,"y = 6.43e-04 x + -1.3",0.415
+"202208_analysis/ft_betagammaiota_root/beta_10_mask_root.tre",26424,"y = 5.85e-04 x + -1.18",0.241,"beta_10",0.001,39,"y = 5.92e-04 x + -1.19",0.293,30,1,"y = 5.91e-04 x + -1.19",0.293

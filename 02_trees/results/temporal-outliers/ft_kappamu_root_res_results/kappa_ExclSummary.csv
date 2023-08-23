@@ -1,0 +1,11 @@
+"trees","ntip.start","modelfit.start","R2.start","BOOT","cutoff","Ntip.residual.out","modelfit.excl.resid.out","R2.excl.resid.out","max.muts","Ntip.pendant.out","modelfit.end","R2.end"
+"202208_analysis/ft_kappamu_root/kappa_1_mask_root.tre",7113,"y = 5.03e-04 x + -1.01",0.0104,"kappa_1",0.001,28,"y = 5.53e-04 x + -1.12",0.0134,30,4,"y = 5.42e-04 x + -1.09",0.0127
+"202208_analysis/ft_kappamu_root/kappa_2_mask_root.tre",7113,"y = 4.47e-04 x + -0.903",0.0305,"kappa_2",0.001,19,"y = 4.81e-04 x + -0.972",0.0401,30,1,"y = 4.68e-04 x + -0.944",0.0376
+"202208_analysis/ft_kappamu_root/kappa_3_mask_root.tre",7113,"y = 4.56e-04 x + -0.92",0.0223,"kappa_3",0.001,13,"y = 4.95e-04 x + -1",0.029,30,5,"y = 4.85e-04 x + -0.979",0.0277
+"202208_analysis/ft_kappamu_root/kappa_4_mask_root.tre",7113,"y = 4.64e-04 x + -0.936",0.0299,"kappa_4",0.001,17,"y = 4.93e-04 x + -0.995",0.0391,30,5,"y = 4.85e-04 x + -0.98",0.0379
+"202208_analysis/ft_kappamu_root/kappa_5_mask_root.tre",7113,"y = 5.54e-04 x + -1.12",0.0307,"kappa_5",0.001,15,"y = 5.67e-04 x + -1.15",0.0351,30,5,"y = 5.58e-04 x + -1.13",0.0338
+"202208_analysis/ft_kappamu_root/kappa_6_mask_root.tre",7113,"y = 4.34e-04 x + -0.876",0.0209,"kappa_6",0.001,15,"y = 4.60e-04 x + -0.928",0.0258,30,4,"y = 4.47e-04 x + -0.901",0.0243
+"202208_analysis/ft_kappamu_root/kappa_7_mask_root.tre",7113,"y = 4.92e-04 x + -0.994",0.0335,"kappa_7",0.001,13,"y = 5.14e-04 x + -1.04",0.0412,30,5,"y = 5.04e-04 x + -1.02",0.0395
+"202208_analysis/ft_kappamu_root/kappa_8_mask_root.tre",7113,"y = 4.50e-04 x + -0.909",0.0283,"kappa_8",0.001,15,"y = 4.75e-04 x + -0.959",0.036,30,5,"y = 4.64e-04 x + -0.936",0.0345
+"202208_analysis/ft_kappamu_root/kappa_9_mask_root.tre",7113,"y = 4.35e-04 x + -0.878",0.0159,"kappa_9",0.001,17,"y = 4.63e-04 x + -0.935",0.0196,30,5,"y = 4.55e-04 x + -0.918",0.0188
+"202208_analysis/ft_kappamu_root/kappa_10_mask_root.tre",7113,"y = 5.04e-04 x + -1.02",0.0556,"kappa_10",0.001,13,"y = 5.40e-04 x + -1.09",0.0773,30,3,"y = 5.32e-04 x + -1.07",0.0753

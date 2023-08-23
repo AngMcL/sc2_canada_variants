@@ -1,0 +1,59 @@
+---
+title: "Splitfunctions"
+author: "Angela"
+date: "04/04/2022"
+output: html_document
+---
+
+<!-- ```{r} -->
+<!-- library(stringr) -->
+<!-- library(tidyr) -->
+<!-- boots<-read.csv("BootsFunctions.csv") -->
+<!-- head(boots) -->
+
+
+
+<!-- boots<-boots %>% separate(col=Initial.strict.clock.function, sep =  "\\ ", into=c(as.character(seq(1,6,1)))) -->
+<!-- boots$slope.initial<-boots$`3` -->
+<!-- boots<-boots[,-which(colnames(boots) %in% c(as.character(seq(1,6,1))))] -->
+
+<!-- boots<-boots %>% separate(col=Final.strict.clock.function, sep =  "\\ ", into=c(as.character(seq(1,6,1)))) -->
+<!-- boots$slope.final<-boots$`3` -->
+<!-- boots<-boots[,-which(colnames(boots) %in% c(as.character(seq(1,6,1))))] -->
+<!-- head(boots) -->
+
+<!-- #what was the mean and 95% confidence interval (t-distrib) for thefinal strict clock rate for 75% stragetgy? -->
+<!-- rate.75<-as.numeric(boots$slope.final[which(boots$Strategy=="75%")]) -->
+<!-- n<-length(rate.75) -->
+<!-- m<-mean(rate.75,na.rm = T) -->
+<!-- sd<-sd(rate.75,na.rm = T) -->
+<!-- t<-qt(0.025,(n-1),lower.tail=F) -->
+<!-- low<-m-(sd/sqrt(n)*t) -->
+<!-- high<-m+(sd/sqrt(n)*t) -->
+
+<!-- formatC(m, format = "e", digits = 2) -->
+<!-- formatC(low, format = "e", digits = 2) -->
+<!-- formatC(high, format = "e", digits = 2) -->
+
+
+<!-- write.csv(boots,"BootsSlopes.csv") -->
+<!-- ``` -->
+
+```{r}
+library(tidyverse)
+f.in<-"202208_analysis/alpha_lsd_out/"
+tmrca<-read.csv(paste0(f.in,"TMRCA-rate.csv"))
+# tmrca<-tmrca %>% separate (rate, into=c("A","B","C","D"), sep=",|;")
+tmrca<-tmrca %>% separate (rate, into=c("mean rate","a"),sep="\\[")
+tmrca<-tmrca %>% separate (a, into=c("lower rate",	"upper rate"),sep="; ")
+tmrca$"upper rate"<-str_replace_all(tmrca$"upper rate", "\\]","")
+
+tmrca<-tmrca %>% separate(tMRCA, into=c("mean TMRCA","c"),sep="\\[")
+tmrca$"mean TMRCA"<-trimws(tmrca$"mean TMRCA")
+tmrca<-tmrca %>% separate(c, into=c("lower TMRCA",	"upper TMRCA"),sep="; ")
+tmrca$"upper TMRCA"<-str_replace_all(tmrca$"upper TMRCA", "\\]","")
+head(tmrca)
+
+write.csv(tmrca, paste0(f.in,"tmrca_log_parsed.csv"))
+```
+

@@ -1,0 +1,678 @@
+---
+title: "Untitled"
+author: "Angela"
+date: '2023-01-03'
+output: html_document
+---
+
+Objectives
+* compare the root-to-tip regression of 
+1) variants, 
+2) subsampling temporal vs uniform, 
+3) bootstraps
+
+* extract/re-calculate original slopes pre-exclusion and post-exclusion 
+* make a single slope across boots to compare variants' rtt
+* compare the inferred strict and relaxed clock rates by variant
+* compare the inferred clock rate from strict rtt and relaxed model for 1, 2, 3
+* sampling proportion matters... go back to 2020 analysis to compare different % inclusion of canadian seqs
+
+```{r}
+# setup libraries
+library(stringr)
+library(ape)
+library(treeio)
+library(adephylo)
+library(tidyverse)
+library(gtools)
+library(lubridate)
+library(scales)
+library(reshape2)
+
+#set up outputs
+f.out<-"compare_rtt"
+if(!dir.exists(f.out)){dir.create(f.out)}
+```
+
+## plotting extras
+```{r}
+data.date<-"2022-03-22" 
+start.date<-"2020-11-01"
+
+pubThemeDate<-theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                    panel.background=element_rect("grey95"), axis.line = element_line(colour = "black"),
+                    text=element_text(size=10,face="bold"),
+                    legend.key.size = unit(0.4,"line"),
+                    legend.text=element_text(size=8),
+                    axis.text.x=element_text(angle = 45,hjust=1,size=rel(1)))
+
+xdates<-ymd(c("2020-12-01","2021-03-01","2021-06-01","2021-09-01","2021-12-01","2022-03-01"))
+scaleDateBusy<-scale_x_date(breaks=xdates, date_labels = "%b %Y",
+                            limits=as.Date(c(start.date,"2022-03-22")),
+                            expand=c(0,0))
+
+variant.colors.in<-"../../01_subSample/CleanMeta_PreSubsamp/variant_colors.tsv"
+variant.df.in<-paste0("../../01_subSample/Results_PreSubsamp/variant.df.can.csv")
+
+## read in the variant df to use for inputs
+var.df<-read.csv(variant.df.in)
+var.df<-var.df[with(var.df, order(var.df$first.can.date, decreasing = F)),]
+#add to var.df
+var.omi<-var.df[which(var.df$var.WHO=="Omicron"),]
+var.omi<-rbind(var.omi,var.omi,var.omi,var.omi) #one for each sep lineage considered
+omis<-c("BA.1","BA.1.1","BA.2", "BA.3")
+var.omi$var.WHO<-omis
+var.omi$var.lin<-omis
+var.omi$first.glob.date<-c("2021-09-02","2021-09-09","2021-09-21","2021-11-23")
+#join var.omi onto var.df 
+var.df<-rbind(var.df,var.omi)
+#remove 'omicron' full group
+var.df<-var.df[-which(var.df$var.WHO=="Omicron"),]
+
+#take the names
+var.ord<-var.df$var.WHO
+var.ord<-var.ord[-which(var.ord %in% c("Theta","Lambda","GH/490R"))]
+
+#read in variant colors
+varPalette<-read.table(variant.colors.in,sep="\t")
+
+## make color scheme
+var.colz<-as.character(varPalette$vars.ch)
+varPalette.ch<-row.names(varPalette)
+names(varPalette.ch)<-var.colz
+
+### add separate groups for each omicron group
+omis<-c("BA.1","BA.1.1","BA.2")
+# https://www.colorhexa.com/ec9a91
+omiPalette.ch<-c("#e47266","#e8867b","#f0aea7") 
+names(omiPalette.ch)<-omis
+morevarPal<-c(varPalette.ch[match(var.ord,names(varPalette.ch))],
+              omiPalette.ch)
+morevarPal<-morevarPal[-which(names(morevarPal)=="Omicron")]
+
+var.ord.omi<-var.ord
+var.ord.omi<-var.ord.omi[-which(var.ord.omi=="Omicron")]
+var.ord.omi<-c(var.ord.omi,omis)
+VarColScale<-scale_colour_manual(name = "Variant",values = morevarPal,na.value=NULL)
+VarFillScale<-scale_fill_manual(name = "Variant",values = morevarPal,na.value=NULL)
+
+```
+
+# FOR EACH VARIANT
+```{r}
+focalvar<- "other"
+Focalvar<- "Other"
+treebase<-"../202210_analysis/ft_other_root_res" #locaiton of residuals/rtt dist
+resbase<-"../202210_analysis/ft_other_root" #locaiton of residuals/rtt dist
+metabase<-"../../01_subSample/bootsamples_meta_202210" 
+
+# focalvar<- "delta"
+# Focalvar<- "Delta"
+# treebase<-"../202208_analysis/ft_alphadelta_root_res" #locaiton of residuals/rtt dist
+# resbase<-"../202208_analysis/ft_alphadelta_root" #locaiton of residuals/rtt dist
+# metabase<-"../../01_subSample/bootsamples_meta_202208" #might not need
+```
+
+## Run for each
+```{r}
+#setup treefiles
+trees.in<-list.files(treebase,pattern = "res.tre",full.names = T) %>% mixedsort ()
+if(length(trees.in)<1 | all(!file.exists(trees.in))){
+    print("trees not found");break
+}
+
+#restrict to focus VOC
+trees.in<-str_subset(trees.in,paste0("/",focalvar,"_"))
+
+#number of bootstraps/trees
+b<-length(trees.in)
+
+#list residual data
+tempest.in<-str_replace_all(trees.in, "_res.tre",".tsv")
+tempest.in<-str_replace_all(tempest.in,treebase, resbase)
+if(length(tempest.in)<1 | all(!file.exists(tempest.in))){
+    print("tempest tsv not found");break
+}
+
+#metadata
+meta.in<-str_replace_all(trees.in, treebase,metabase)
+meta.in<-str_replace_all(meta.in, "_mask_root_res.tre",".csv")
+if(length(meta.in)<1 | all(!file.exists(meta.in))){
+  print("meta not found");break
+}
+
+## Read in rtt dist and dates for clean subs scaled trees
+
+# Read in rooted/excl trees (output from Remove outliers), residual (r-t-t dist) and dates,
+## Read in the trees into a list
+trees<-replicate(n=b, vector)
+
+for (i in 1:b){
+  trees[[i]]<-read.tree(file=trees.in[i])
+}
+
+## Read in tempest data with residuals here
+resid<-replicate(n=b,vector())
+for (i in 1:b){
+  resid[[i]]<-read.table(file=tempest.in[i] ,sep="\t",header=T)
+  #boot name
+  boot.nm<-str_replace_all(last(unlist(strsplit(tempest.in[i],"/"))),"_mask_root.tsv","")
+  resid[[i]]$boot<-boot.nm
+}
+
+# exclude resid rows if not in the tree
+for (i in 1:b){
+  nope<-which(!resid[[i]]$tip %in% trees[[i]]$tip.label)
+  if(length(nope)>0){
+    resid[[i]]<-resid[[i]][-nope,]
+  }
+}
+
+# read in the meta
+meta<-replicate(n=b,vector())
+for (i in 1:b){
+  meta[[i]]<-read.table(file=meta.in[i] ,sep=",",header=T)
+  meta[[i]]$boot<-i
+  meta[[i]]$tip<-meta[[i]]$new.names
+  #calculate meta decdates
+  meta[[i]]$decdate<-decimal_date(as.Date(meta[[i]]$date))
+  #change this so we can use later
+  meta[[i]]$incomp[meta[[i]]$country!="Canada"]<-0
+  #trim the object down
+  meta[[i]]<-meta[[i]][,c("tip","var.WHO","Lineage","decdate","incomp","date")]
+  colnames(meta[[i]])[ncol(meta[[i]])]<-"fulldate"
+}
+
+#Link to resid by tiplabel
+for (i in 1:b){
+  resid[[i]]<-left_join(resid[[i]], meta[[i]],by="tip")
+  #replace the resid date with the meta decdates
+  resid[[i]]$date<-resid[[i]]$decdate
+  resid[[i]]<-resid[[i]][,-which(colnames(resid[[i]])=="decdate")]
+}
+
+#restrict to variants
+if(focalvar != "other"){ #as long as not analyzing Other specifically:
+  for (i in 1:b){
+    if(any(is.na(resid[[i]]$var.WHO))){ #NA
+      resid[[i]]<-resid[[i]][-which(is.na(resid[[i]]$var.WHO)),]
+    }
+    if(any(resid[[i]]$var.WHO=="Other")){ 
+      resid[[i]]<-resid[[i]][-which(resid[[i]]$var.WHO=="Other"),]
+    }
+  }
+}
+
+## Make a plot of rtt regression for each variant
+##make a linear fit for each boot
+summary.table<-data.frame(focalvar=rep(Focalvar,10), 
+                          boot=1:b, 
+                          n=NA,
+                          slope=NA,
+                          intercept=NA,
+                          eqn=NA,
+                          adjR2=NA)
+for (i in 1:b){
+  m<-lm(resid[[i]]$distance ~ resid[[i]]$date)
+  # plot(resid[[i]]$distance ~ resid[[i]]$date)
+  #calculate the residuals and replace in the df
+  resid[[i]]$residual<-residuals(m)
+  #extract slope
+  lm<-summary(m)
+  slope.n<-coef(lm)[[2]] #numeric
+  slope<-formatC(slope.n,format="e", digits=2)
+
+  # add to summary table
+  summary.table$n[i]<-nrow(resid[[i]])
+  summary.table$slope[i]<-slope.n
+  summary.table$intercept[i]<-coef(lm)[[1]]
+  summary.table$eqn[i]<-paste("y = ",slope," x + ",signif(int,digits=3),sep="")
+  summary.table$adjR2[i]<-signif(lm$adj.r.squared,digits = 3)
+}
+
+if(focalvar=="delta"){
+  #delta has 3 bad boots: 4, 7, 9
+  summary.table<-summary.table[-c(4,7,9),]
+}
+
+#downsample for plot
+restip<-sample(resid[[1]]$tip,size=nrow(resid[[1]])*0.5, replace = F)
+ressamp<-resid[[1]][match(restip,resid[[1]]$tip),]
+```  
+
+## save as separate objects
+```{r}
+summary.table.other<-summary.table
+ressamp.other<-ressamp
+```
+
+# join variants together
+```{r}
+summary.table.all<-rbind(summary.table.ba2,summary.table.ba1,summary.table.ba11,
+                         summary.table.alpha, summary.table.delta, summary.table.beta,
+                         summary.table.gamma,summary.table.iota,summary.table.eta,
+                         summary.table.epsilon,summary.table.kappa,summary.table.mu,
+                         summary.table.zeta, summary.table.other
+                         )
+ressamp.all<-rbind(ressamp.ba2,ressamp.ba1,ressamp.ba11,
+                   ressamp.alpha,ressamp.delta,ressamp.beta,
+                   ressamp.gamma,ressamp.iota,ressamp.eta,
+                   ressamp.epsilon,ressamp.kappa,ressamp.mu,
+                   ressamp.zeta, ressamp.other
+                   )
+```
+
+## PLOT STRICT CLOCK RATES violin and RTT across vars
+```{r}
+summary.table.all$focalvar<-factor(summary.table.all$focalvar,var.ord.omi)
+#Plot a violin plot of strict molecular clock rate
+v.p<-ggplot(summary.table.all)+
+  geom_point(aes(x=focalvar, y=slope),size=rel(0.7))+    
+  geom_violin(aes(x=focalvar, y=slope,fill=focalvar),alpha=0.7,width=1,scale="width")+
+  labs(x=NULL,y="Strict clock rate [s/s/y]")+
+  scale_y_continuous(breaks=seq(0,0.0015,0.0002),labels = format(seq(0,0.0015,0.0002),scientific = T))+
+  guides(fill=guide_legend(title="Variant"))+
+  pubThemeDate+
+  theme(legend.position = "none")+
+  VarFillScale
+v.p
+ggsave(paste0(f.out,"/violin_strict.png"),height=3,width=4,units="in")
+
+#downsample a random bootstrap to 50%
+ressamp.all$var.WHO<-factor(ressamp.all$var.WHO,levels=var.ord.omi)
+ggplot(ressamp.all,aes(x=date,y=distance, group=var.WHO, color=var.WHO))+
+  geom_point(alpha=0.4)+
+  labs(x="Year",y="Root-to-tip distance",color="Variant")+
+  geom_smooth(method="lm", se = F,size = 2, color = "black")+
+  geom_smooth(method="lm", se = TRUE)+
+  pubThemeDate+
+  theme(legend.position = c(0.2,0.7))+
+  VarColScale
+ggsave(paste0(f.out,"/rtt_all.png"),height=4,width=5,units="in")
+
+```
+
+## Test if slopes sig'ly different in rtt analysis?
+```{r}
+#kruskal: any diff?
+kruskal.test(data=summary.table.all, slope ~ focalvar) #signif
+#which pairs of groups are different: wilcox
+df_wil<-pairwise.wilcox.test(summary.table.all$slope, summary.table.all$focalvar,
+                 p.adjust.method = "BH")
+df_p<-df_wil$p.value
+
+## make a heat map of this instead of trying to overlay
+## group into signif categories
+mat<-df_p
+mat2<-mat
+for(i in 1:nrow(mat)){
+  for (j in 1:ncol(mat)){
+    v<-mat2[i,j]
+    if(is.na(v)){next}
+    if (v<1e-4){mat[i,j]<-"<1e-4";next}
+    if (v>=1e-4 & v<1e-3){mat[i,j]<-"1e-4 - 1e-3";next}
+    if (v>=1e-3 & v<1e-2){mat[i,j]<-"1e-3 - 1e-2";next}
+    if (v>=1e-2 & v<1e-1){mat[i,j]<-"1e-2 - 1e-1";next}
+    if (v>=1e-1){mat[i,j]<-">1e-1"}
+  }
+}
+#colorss
+sigs<-c("<1e-4", "1e-4 - 1e-3", "1e-3 - 1e-2", "1e-2 - 1e-1", ">1e-1")
+colz<-viridis_pal(direction = -1)(length(sigs))
+names(colz)<-sigs
+
+#melt long
+mat2<-mat %>% reshape2::melt()
+colnames(mat2)<-c("Var2","Var1","value")
+mat3<-rbind(mat2)
+
+#remove same
+rem<-c()
+for (i in 1:nrow(mat3)){
+  if(mat3$Var1[i]==mat3$Var2[i]){rem<-c(rem,i)}
+}
+length(rem)
+mat4<-mat3[-rem,]
+
+#order Var1 and Var2
+mat4$Var2<-factor(mat4$Var2, levels = var.ord)
+mat4$Var1<-factor(mat4$Var1, levels = var.ord)
+mat4<-mat4[-which(is.na(mat4$value)),]
+mat4$value<-factor(mat4$value,levels=sigs)
+
+P.heat<- mat4 %>% ggplot()+
+  geom_tile(aes(x=Var1,y=Var2,fill=factor(value)))+
+  labs(x=NULL,y=NULL,fill="Pairwise Wilcox\nAdjusted p value")+
+  scale_fill_manual(values=colz)+
+  pubThemeDate+
+  theme(legend.position="right",
+           legend.text=element_text(size=10))
+P.heat
+ggsave(paste0(f.out,"/StrictClockHeatmap.png"),height=4,width=5,units="in")
+
+```
+
+## REad in the relaxed clocks - need to be parsed
+```{r}
+rel<-read.csv("relaxedRates.csv")
+# colnames(rel)
+
+#parse
+rel$mean<-as.numeric(NA)
+rel$upper<-as.numeric(NA)
+rel$lower<-as.numeric(NA)
+for (i in 1:nrow(rel)){
+  par<-unlist(str_split(rel$string[i],","))
+  par.rt<-unlist(str_split(trimws(par[1]),"\\ "))
+  rel$mean[i]<-par.rt[2] 
+  rel$lower[i]<-str_replace_all(par.rt[3],"\\[|;","")
+  rel$upper[i]<-str_replace_all(par.rt[4],"\\]","")
+}
+rel$mean<-as.numeric(rel$mean)
+rel$lower<-as.numeric(rel$lower)
+rel$upper<-as.numeric(rel$upper)
+
+rel$Variant<-str_to_title(rel$variant)
+rel$Variant<-str_replace_all(rel$Variant,"Ba","BA")
+rel$Variant<-factor(rel$Variant,var.ord.omi)
+#Plot a violin plot of strict molecular clock rate
+v.rel<-ggplot(data=rel,aes(x=Variant, y=mean,fill=Variant))+
+  geom_point(size=rel(0.7),position=position_dodge2(width=0.5),alpha=0.5)+    
+  geom_linerange(aes(ymin=lower,ymax=upper),
+                position=position_dodge2(width=0.5,padding=0.5),alpha=0.5)+
+  geom_violin(alpha=0.7,width=1,scale="width")+
+  labs(x=NULL,y="Mean relaxed clock rate [s/s/y]")+
+  scale_y_continuous(breaks=seq(0,0.001,0.0001),labels = format(seq(0,0.001,0.0001),scientific = T))+
+  guides(fill=guide_legend(title="Variant"))+
+  pubThemeDate+
+  theme(legend.position = "none")+
+  VarFillScale+
+  VarColScale
+v.rel
+ggsave(paste0(f.out,"/violin_relaxed.png"),height=3,width=4,units="in")
+
+#also compare relaxed to strict
+```
+
+## stats for relaxed clocks
+```{r}
+#kruskal: any diff?
+kruskal.test(data=rel, mean ~ Variant) #signif
+#which pairs of groups are different: wilcox
+df_wil<-pairwise.wilcox.test(rel$mean, rel$Variant,
+                 p.adjust.method = "BH")
+df_p<-df_wil$p.value
+
+## make a heat map of this instead of trying to overlay
+## group into signif categories
+mat<-df_p
+mat2<-mat
+for(i in 1:nrow(mat)){
+  for (j in 1:ncol(mat)){
+    v<-mat2[i,j]
+    if(is.na(v)){next}
+    if (v<1e-4){mat[i,j]<-"<1e-4";next}
+    if (v>=1e-4 & v<1e-3){mat[i,j]<-"1e-4 - 1e-3";next}
+    if (v>=1e-3 & v<1e-2){mat[i,j]<-"1e-3 - 1e-2";next}
+    if (v>=1e-2 & v<1e-1){mat[i,j]<-"1e-2 - 1e-1";next}
+    if (v>=1e-1){mat[i,j]<-">1e-1"}
+  }
+}
+#colorss
+sigs<-c("<1e-4", "1e-4 - 1e-3", "1e-3 - 1e-2", "1e-2 - 1e-1", ">1e-1")
+colz<-viridis_pal(direction = -1)(length(sigs))
+names(colz)<-sigs
+
+#melt long
+mat2<-mat %>% reshape2::melt()
+colnames(mat2)<-c("Var2","Var1","value")
+mat3<-rbind(mat2)
+
+#remove same
+rem<-c()
+for (i in 1:nrow(mat3)){
+  if(mat3$Var1[i]==mat3$Var2[i]){rem<-c(rem,i)}
+}
+length(rem)
+mat4<-mat3[-rem,]
+
+#order Var1 and Var2
+mat4$Var2<-factor(mat4$Var2, levels = var.ord)
+mat4$Var1<-factor(mat4$Var1, levels = var.ord)
+mat4<-mat4[-which(is.na(mat4$value)),]
+mat4$value<-factor(mat4$value,levels=sigs)
+
+P.heatr<- mat4 %>% ggplot()+
+  geom_tile(aes(x=Var1,y=Var2,fill=factor(value)))+
+  labs(x=NULL,y=NULL,fill="Pairwise Wilcox\nAdjusted p value")+
+  scale_fill_manual(values=colz)+
+  pubThemeDate+
+  theme(legend.position="right",
+           legend.text=element_text(size=10))
+P.heatr
+ggsave(paste0(f.out,"/RelaxedClockHeatmap.png"),height=4,width=5,units="in")
+
+```
+
+# Comapre the different subsamp strategies taken in SC2 2020 paper
+```{r}
+strict20<-read.csv("../../../20210301_phylogeo/02_trees/SummaryTables/BootsSlopes.csv")
+
+#instead of Variants, compare across strategies (25 vs 50 75 100%)
+head(strict20) #slopefinal
+strict20$slope.final<-as.numeric(strict20$slope.final)
+colnames(strict20)
+```
+
+## PLOT STRICT rates 2020 violin across strategies
+```{r}
+strat.ord<-c("25%","50%","75%","100%")
+strict20$Strategy<-factor(strict20$Strategy,strat.ord)
+#Plot a violin plot of strict molecular clock rate
+v.s20<-ggplot(strict20)+
+  geom_point(aes(x=Strategy, y=slope.initial),size=rel(0.7))+    
+  geom_violin(aes(x=Strategy, y=slope.initial,fill=Strategy),alpha=0.7,width=1,scale="width")+
+  labs(x="% Canadian seqs included",y="Strict clock rate [s/s/y]")+
+  scale_y_continuous(breaks=seq(0,0.0015,0.0002),labels = format(seq(0,0.0015,0.0002),scientific = T))+
+  pubThemeDate+
+  theme(legend.position = "none")
+v.s20
+ggsave(paste0(f.out,"/2020_strat_violin_strict.png"),height=3,width=4,units="in")
+
+## SIGNIFI?
+kruskal.test(data=strict20, slope.initial ~ Strategy) #signif
+#which pairs of groups are different: wilcox
+df_wil<-pairwise.wilcox.test(strict20$slope.initial, strict20$Strategy,
+                 p.adjust.method = "BH")
+df_p<-df_wil$p.value
+
+## make a heat map of this instead of trying to overlay
+## group into signif categories
+mat<-df_p
+mat2<-mat
+for(i in 1:nrow(mat)){
+  for (j in 1:ncol(mat)){
+    v<-mat2[i,j]
+    if(is.na(v)){next}
+    if (v<1e-4){mat[i,j]<-"<1e-4";next}
+    if (v>=1e-4 & v<1e-3){mat[i,j]<-"1e-4 - 1e-3";next}
+    if (v>=1e-3 & v<1e-2){mat[i,j]<-"1e-3 - 1e-2";next}
+    if (v>=1e-2 & v<1e-1){mat[i,j]<-"1e-2 - 1e-1";next}
+    if (v>=1e-1){mat[i,j]<-">1e-1"}
+  }
+}
+#colorss
+sigs<-c("<1e-4", "1e-4 - 1e-3", "1e-3 - 1e-2", "1e-2 - 1e-1", ">1e-1")
+colz<-viridis_pal(direction = -1)(length(sigs))
+names(colz)<-sigs
+
+#melt long
+mat2<-mat %>% reshape2::melt()
+colnames(mat2)<-c("Var2","Var1","value")
+mat3<-rbind(mat2)
+
+#remove same
+rem<-c()
+for (i in 1:nrow(mat3)){
+  if(mat3$Var1[i]==mat3$Var2[i]){rem<-c(rem,i)}
+}
+length(rem)
+mat4<-mat3[-rem,]
+
+#order Var1 and Var2
+mat4$Var2<-factor(mat4$Var2, levels = strat.ord)
+mat4$Var1<-factor(mat4$Var1, levels = strat.ord)
+mat4<-mat4[-which(is.na(mat4$value)),]
+mat4$value<-factor(mat4$value,levels=sigs)
+
+P.heat20<- mat4 %>% ggplot()+
+  geom_tile(aes(x=Var1,y=Var2,fill=factor(value)))+
+  labs(x=NULL,y=NULL,fill="Pairwise Wilcox\nAdjusted p value")+
+  scale_fill_manual(values=colz)+
+  pubThemeDate+
+  theme(legend.position="right",
+           legend.text=element_text(size=10))
+P.heat20
+ggsave(paste0(f.out,"/2020_StrictClockHeatmap.png"),height=2,width=3,units="in")
+
+```
+
+## PLOT Relaxed rates 2020 violin across strategies
+```{r}
+rel20<-read.csv("../../../20210301_phylogeo/02_trees/SummaryTables/tmrca_log_parsed.csv")
+rel20$Strategy<-factor(rel20$Strategy,strat.ord)
+rel20<-rel20[-which(is.na(rel20$Strategy)),]
+
+rel20$Mean<-as.numeric(rel20$Mean) #some NAs
+rel20$lower.95..CI<-as.numeric(rel20$lower.95..CI)
+rel20$upper.95..CI<-as.numeric(rel20$upper.95..CI)
+
+#Plot a violin plot of Relaxed molecular clock rate
+v.rel20<-ggplot(data=rel20,aes(x=Strategy, y=Mean,fill=Strategy))+
+  geom_point(size=rel(0.7),position=position_dodge2(width=0.5),alpha=0.5)+    
+  geom_linerange(aes(ymin=lower.95..CI,ymax=upper.95..CI),
+                position=position_dodge2(width=0.5,padding=0.5),alpha=0.5)+
+  geom_violin(alpha=0.7,width=1,scale="width")+
+  labs(x=NULL,y="Mean relaxed clock rate [s/s/y]")+
+  scale_y_continuous(breaks=seq(0,0.001,0.0001),labels = format(seq(0,0.001,0.0001),scientific = T))+
+  labs(x="% Canadian seqs included",y="Relaxed clock rate [s/s/y]")+
+  pubThemeDate+
+  theme(legend.position = "none")
+v.rel20
+ggsave(paste0(f.out,"/2020_strat_violin_Relaxed.png"),height=3,width=4,units="in")
+
+## SIGNIFI?
+kruskal.test(data=rel20, Mean ~ Strategy) #signif p-value = 0.01346
+#which pairs of groups are different: wilcox
+df_wil<-pairwise.wilcox.test(rel20$Mean, rel20$Strategy,
+                 p.adjust.method = "BH")
+df_p<-df_wil$p.value
+
+## make a heat map of this instead of trying to overlay
+## group into signif categories
+mat<-df_p
+mat2<-mat
+for(i in 1:nrow(mat)){
+  for (j in 1:ncol(mat)){
+    v<-mat2[i,j]
+    if(is.na(v)){next}
+    if (v<1e-4){mat[i,j]<-"<1e-4";next}
+    if (v>=1e-4 & v<1e-3){mat[i,j]<-"1e-4 - 1e-3";next}
+    if (v>=1e-3 & v<1e-2){mat[i,j]<-"1e-3 - 1e-2";next}
+    if (v>=1e-2 & v<1e-1){mat[i,j]<-"1e-2 - 1e-1";next}
+    if (v>=1e-1){mat[i,j]<-">1e-1"}
+  }
+}
+#colorss
+sigs<-c("<1e-4", "1e-4 - 1e-3", "1e-3 - 1e-2", "1e-2 - 1e-1", ">1e-1")
+colz<-viridis_pal(direction = -1)(length(sigs))
+names(colz)<-sigs
+
+#melt long
+mat2<-mat %>% reshape2::melt()
+colnames(mat2)<-c("Var2","Var1","value")
+mat3<-rbind(mat2)
+
+#remove same
+rem<-c()
+for (i in 1:nrow(mat3)){
+  if(mat3$Var1[i]==mat3$Var2[i]){rem<-c(rem,i)}
+}
+length(rem)
+mat4<-mat3[-rem,]
+
+#order Var1 and Var2
+mat4$Var2<-factor(mat4$Var2, levels = strat.ord)
+mat4$Var1<-factor(mat4$Var1, levels = strat.ord)
+mat4<-mat4[-which(is.na(mat4$value)),]
+mat4$value<-factor(mat4$value,levels=sigs)
+
+P.heat20<- mat4 %>% ggplot()+
+  geom_tile(aes(x=Var1,y=Var2,fill=factor(value)))+
+  labs(x=NULL,y=NULL,fill="Pairwise Wilcox\nAdjusted p value")+
+  scale_fill_manual(values=colz)+
+  pubThemeDate+
+  theme(legend.position="right",
+           legend.text=element_text(size=10))
+P.heat20
+ggsave(paste0(f.out,"/2020_RelaxedClockHeatmap.png"),height=2,width=3,units="in")
+
+```
+
+# UNIFORM temporal
+```{r}
+### for other, have this comaprison
+other<-summary.table.other
+other<-other[,c(2,4)]
+other$temp<-"Case proportional"
+
+table2<-strict20[strict20$Strategy=="50%",]
+table2<-table2[,c("Bootstrap","slope.final")]
+table2$temp<-"Uniform"
+colnames(table2)<-colnames(other)
+
+other.strict<-bind_rows(other,table2)
+other.strict$clock<-"strict"
+
+#relaxed temp
+other.rel<-rel[rel$Variant=="Other",]
+other.rel<-other.rel[,c("boot","mean")]
+other.rel$temp<-"Case proportional"
+table3<-rel20[rel20$Strategy=="50%",]
+table3<-table3[,c("Bootstrap","Mean")]
+table3$temp<-"Uniform"
+colnames(table3)<-colnames(other.rel)
+other.rel2<-bind_rows(other.rel,table3)
+other.rel2$clock<-"relaxed"
+
+colnames(other.strict)<-colnames(other.rel2)
+all.other<-bind_rows(other.strict,other.rel2)
+
+other.p<-ggplot(all.other,aes(x=clock,fill=temp,y=mean))+
+  geom_point(size=rel(0.6),position = position_dodge2(width=0.7),alpha=0.5)+    
+  geom_violin(alpha=0.7,width=0.7,scale="width")+
+  labs(x=NULL,y="Clock rate [s/s/y]")+
+  scale_y_continuous(breaks=seq(0,0.0015,0.0002),labels = format(seq(0,0.0015,0.0002),scientific = T))+
+  guides(fill=guide_legend(title="Temporal\nsampling\nstrategy"))+
+  pubThemeDate+
+  theme(legend.position = c(0.25,0.8))+
+  annotate(geom="text",x = 1,y=3.6e-4, label="p=1.5e-4",size=rel(2))+
+  annotate(geom="segment",x=0.75,xend=1.25,y=3.4e-4,yend=3.4e-4)+
+  annotate(geom="text",x = 2,y=8.6e-4, label="p=0.016",size=rel(2))+
+  annotate(geom="segment",x=1.75,xend=2.25,y=8.4e-4,yend=8.4e-4)
+
+  other.p
+ggsave(paste0(f.out,"/violin_other.png"),height=3,width=4,units="in")
+
+all.other.2<-all.other[all.other$clock=="relaxed",]
+all.other.1<-all.other[all.other$clock=="strict",]
+
+kruskal.test(data=all.other.1, mean ~ temp) #signif  p-value = 0.01553
+kruskal.test(data=all.other.2, mean ~ temp) #signif  p-value = 0.0001571
+#which pairs of groups are different: wilcox
+df_wil<-pairwise.wilcox.test(all.other.1$mean, all.other.1$temp,
+                 p.adjust.method = "BH") #0.017
+df_wil<-pairwise.wilcox.test(all.other.2$mean, all.other.2$temp,
+                 p.adjust.method = "BH") #1.1e-05 
+```
+

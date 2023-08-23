@@ -1,0 +1,11 @@
+"trees","ntip.start","modelfit.start","R2.start","BOOT","cutoff","Ntip.residual.out","modelfit.excl.resid.out","R2.excl.resid.out","max.muts","Ntip.pendant.out","modelfit.end","R2.end"
+"ft_alphadelta_root/alpha_1_mask_root.tre",50022,"y = 4.96e-04 x + -1",0.198,"alpha_1",0.001,6,"y = 4.95e-04 x + -1",0.203,30,1,"y = 4.95e-04 x + -0.999",0.202
+"ft_alphadelta_root/alpha_2_mask_root.tre",50022,"y = 5.28e-04 x + -1.07",0.18,"alpha_2",0.001,10,"y = 5.25e-04 x + -1.06",0.181,30,1,"y = 5.25e-04 x + -1.06",0.181
+"ft_alphadelta_root/alpha_3_mask_root.tre",50022,"y = 5.36e-04 x + -1.08",0.168,"alpha_3",0.001,10,"y = 5.27e-04 x + -1.06",0.208,30,1,"y = 5.26e-04 x + -1.06",0.208
+"ft_alphadelta_root/alpha_4_mask_root.tre",50022,"y = 5.41e-04 x + -1.09",0.248,"alpha_4",0.001,6,"y = 5.41e-04 x + -1.09",0.251,30,0,"y = 5.41e-04 x + -1.09",0.251
+"ft_alphadelta_root/alpha_5_mask_root.tre",50022,"y = 5.27e-04 x + -1.06",0.183,"alpha_5",0.001,5,"y = 5.26e-04 x + -1.06",0.185,30,2,"y = 5.26e-04 x + -1.06",0.184
+"ft_alphadelta_root/alpha_6_mask_root.tre",50022,"y = 5.71e-04 x + -1.15",0.255,"alpha_6",0.001,9,"y = 5.68e-04 x + -1.15",0.26,30,3,"y = 5.67e-04 x + -1.15",0.26
+"ft_alphadelta_root/alpha_7_mask_root.tre",50022,"y = 5.21e-04 x + -1.05",0.0828,"alpha_7",0.001,8,"y = 5.22e-04 x + -1.05",0.224,30,1,"y = 5.21e-04 x + -1.05",0.223
+"ft_alphadelta_root/alpha_8_mask_root.tre",50022,"y = 5.81e-04 x + -1.17",0.257,"alpha_8",0.001,7,"y = 5.79e-04 x + -1.17",0.259,30,2,"y = 5.79e-04 x + -1.17",0.259
+"ft_alphadelta_root/alpha_9_mask_root.tre",50022,"y = 5.90e-04 x + -1.19",0.131,"alpha_9",0.001,10,"y = 5.89e-04 x + -1.19",0.168,30,1,"y = 5.89e-04 x + -1.19",0.168
+"ft_alphadelta_root/alpha_10_mask_root.tre",50022,"y = 5.63e-04 x + -1.14",0.237,"alpha_10",0.001,6,"y = 5.63e-04 x + -1.14",0.24,30,2,"y = 5.62e-04 x + -1.13",0.239

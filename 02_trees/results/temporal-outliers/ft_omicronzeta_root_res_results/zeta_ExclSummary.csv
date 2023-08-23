@@ -1,0 +1,11 @@
+"trees","ntip.start","modelfit.start","R2.start","BOOT","cutoff","Ntip.residual.out","modelfit.excl.resid.out","R2.excl.resid.out","max.muts","Ntip.pendant.out","modelfit.end","R2.end"
+"202208_analysis/ft_omicronzeta_root/zeta_1_mask_root.tre",4996,"y = 4.62e-04 x + -0.933",0.156,"zeta_1",0.001,5,"y = 4.52e-04 x + -0.913",0.178,30,0,"y = 4.52e-04 x + -0.913",0.178
+"202208_analysis/ft_omicronzeta_root/zeta_2_mask_root.tre",4996,"y = 4.60e-04 x + -0.929",0.157,"zeta_2",0.001,5,"y = 4.50e-04 x + -0.908",0.179,30,0,"y = 4.50e-04 x + -0.908",0.179
+"202208_analysis/ft_omicronzeta_root/zeta_3_mask_root.tre",4996,"y = 4.64e-04 x + -0.937",0.157,"zeta_3",0.001,5,"y = 4.53e-04 x + -0.915",0.179,30,0,"y = 4.53e-04 x + -0.915",0.179
+"202208_analysis/ft_omicronzeta_root/zeta_4_mask_root.tre",4996,"y = 4.58e-04 x + -0.925",0.154,"zeta_4",0.001,5,"y = 4.48e-04 x + -0.904",0.175,30,0,"y = 4.48e-04 x + -0.904",0.175
+"202208_analysis/ft_omicronzeta_root/zeta_5_mask_root.tre",4996,"y = 4.72e-04 x + -0.954",0.156,"zeta_5",0.001,5,"y = 4.62e-04 x + -0.933",0.176,30,0,"y = 4.62e-04 x + -0.933",0.176
+"202208_analysis/ft_omicronzeta_root/zeta_6_mask_root.tre",4996,"y = 4.73e-04 x + -0.956",0.167,"zeta_6",0.001,5,"y = 4.63e-04 x + -0.934",0.192,30,0,"y = 4.63e-04 x + -0.934",0.192
+"202208_analysis/ft_omicronzeta_root/zeta_7_mask_root.tre",4996,"y = 4.63e-04 x + -0.936",0.157,"zeta_7",0.001,4,"y = 4.54e-04 x + -0.916",0.177,30,0,"y = 4.54e-04 x + -0.916",0.177
+"202208_analysis/ft_omicronzeta_root/zeta_8_mask_root.tre",4996,"y = 4.58e-04 x + -0.925",0.153,"zeta_8",0.001,5,"y = 4.48e-04 x + -0.904",0.174,30,0,"y = 4.48e-04 x + -0.904",0.174
+"202208_analysis/ft_omicronzeta_root/zeta_9_mask_root.tre",4996,"y = 4.62e-04 x + -0.934",0.155,"zeta_9",0.001,5,"y = 4.52e-04 x + -0.914",0.176,30,0,"y = 4.52e-04 x + -0.914",0.176
+"202208_analysis/ft_omicronzeta_root/zeta_10_mask_root.tre",4996,"y = 4.61e-04 x + -0.93",0.156,"zeta_10",0.001,5,"y = 4.51e-04 x + -0.91",0.177,30,0,"y = 4.51e-04 x + -0.91",0.177
