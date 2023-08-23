@@ -1,0 +1,35 @@
+variant = iota
+focal source geography = USA
+lsd folder = ../02_trees/202208_analysis/iota_lsd_out
+var-specific intervention = FALSE
+n.boots = 10
+folder.out = 2023-07-10_iota_analysis/
+Mean (95%CI) # of sublins = 14 (13 - 14)
+Mean (95%CI) # of unique pango lins = 1 (1 - 1)
+Mean (95%CI) # of descendants = 274 (271 - 276)
+Mean (95%CI) # of intl descendants = 8 (7 - 10)
+Mean (95%CI) # of Can descendants = 265 (264 - 266)
+Mean (95% CI) # of USA-origin variant sublineages = 14 (13 - 14)
+Percent of USA-origin variant sublineages = 100
+% of intl sequences from USA: 97.9 (97.9 - 97.9)
+Mean (95% CI) # of USA-origin variant sublineages = 14 (13 - 14)
+Percent of USA-origin variant sublineages = 100
+% of intl sequences from USA: 97.9 (97.9 - 97.9)
+Max weekly sublin importation rate overall on 2021-01-18: 2.43 (1.56 - 3.3)
+Max weekly sublin importation rate from USA on 2021-03-19: 1.87 (1.25 - 2.49)
+Max weekly sublin importation rate from USA on 2021-03-19: 1.87 (1.25 - 2.49)
+# sublineages with >=100 desc: 1 (1 - 1), accounting for 7.3 (7 - 7.6)% of sublineages and 46.7 (46.7 - 46.7)% of Canadian descendants
+# sublineages with >=500 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 37 (36 - 38)
+Total intros, singles + sublins (mean, 95%CI)= 50 (50 - 51)
+Proportion singletons of all intros = 72.6 (71.3 - 73.9)
+Proportion intros with >99 desc = 2 (2 - 2)
+Proportion intros with >=500 desc = 0 (0 - 0)
+Max weekly singles importation rate overall on 2021-03-07: 5.56 (4.89 - 6.23)
+Max weekly singles importation rate from USA on 2021-03-06: 5.1 (4.24 - 5.96)
+Max weekly singles importation rate from USA on 2021-03-07: 5.1 (4.38 - 5.82)
+Max weekly singles importation rate from USA on 2021-03-06: 5.1 (4.24 - 5.96)
+Max weekly singles importation rate from USA on 2021-03-07: 5.1 (4.38 - 5.82)
+Percent singletons fromUSA= 95 (93 - 96)
+Percent singletons fromSouth America= 5 (4 - 6)
+Percent sublineages from USA= 100 (100 - 100)

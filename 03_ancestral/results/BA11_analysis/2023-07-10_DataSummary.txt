@@ -1,0 +1,33 @@
+variant = BA11
+focal source geography = South Africa
+focal source geography = Africa
+lsd folder = ../02_trees/BA_analysis/BA11_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Southern Africa entry ban, enhanced screening, from 2021-11-26 - 2021-12-18
+Intervention duration=22
+First Can sample: 
+Intervention delay = 
+n.boots = 10
+folder.out = 2023-07-05_ba11_analysis/
+Mean (95% CI) # of Southern Africa-origin variant singletons = 13 (9 - 18)
+Mean (95%CI) # of singles pre-intervention = 7 (4 - 10)
+Mean (95%CI) # of singles pre-intervention from focal = 1 (0 - 1)
+Proportion of singles pre-intervention from focal = 0.1 (0.02 - 0.18)
+Mean (95%CI) # of singles during intervention = 495 (431 - 559)
+Mean (95%CI) # of singles during intervention from focal = 6 (4 - 7)
+Proportion of singles during-intervention from focal = 0.01 (0.01 - 0.02)
+Mean (95%CI) # of singles after intervention = 3921 (3736 - 4106)
+Mean (95%CI) # of singles after intervention = 7 (4 - 10)
+Proportion of singles post-intervention from focal = 0 (0 - 0)
+Fold reduction in proportion of singles pre vs during-intervention from focal = Inf (NaN - NaN)
+Max weekly singles importation rate from South Africa on 2021-11-28: 2.27 (0.95 - 3.59)
+Max weekly singles importation rate from Africa on 2021-12-11: 2.27 (1.52 - 3.03)
+Max weekly singles importation rate from USA on 2021-12-30: 631.71 (592.03 - 671.4)
+Weekly singles importation rate pre-int from South Africa on 2021-11-26: 0.38 (0 - 0.75)
+Weekly singles importation rate pre-int from Africa on 2021-11-26: 0 (0 - 0)
+Weekly singles importation rate 2-weeks post-int from South Africa on 2021-12-10: 0.43 (-0.01 - 0.86)
+Weekly singles importation rate 2-weeks post-int from Africa on 2021-12-10: 2.17 (1.45 - 2.89)
+Fold decrease singles rate pre-int to 2-weeks after int from South Africa: 0 (0 - 0)
+Fold decrease singles rate pre-int to 2-weeks after int from Africa: 0 (0 - 0)
+Fold decrease singles rate pre-int to 4-weeks after int from South Africa: 0.14 (-0.07 - 0.36)
+Fold decrease singles rate pre-int to 4-weeks after int from Africa: 0.14 (-0.07 - 0.36)

@@ -1,0 +1,104 @@
+variant = BA11
+focal source geography = South Africa
+focal source geography = Africa
+lsd folder = ../02_trees/BA_analysis/BA11_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Southern Africa entry ban, from 2021-11-26 - 2021-12-18
+Intervention duration=22
+First Can sample: 2021-11-04
+Intervention delay = 22
+n.boots = 10
+folder.out = 2023-07-05_BA11_analysis/
+Mean (95%CI) # of sublins = 1148 (1103 - 1194)
+Mean (95%CI) # of unique pango lins = 1 (1 - 1)
+Mean (95%CI) # of descendants = 24150 (19950 - 28350)
+Mean (95%CI) # of intl descendants = 6979 (3796 - 10163)
+Mean (95%CI) # of Can descendants = 17171 (15931 - 18410)
+Mean (95% CI) # of Southern Africa-origin variant sublineages = 5 (3 - 6)
+Percent of Southern Africa-origin variant sublineages = 0.4
+% of intl sequences from South Africa: 0.4 (0.4 - 0.4)
+% of intl sequences from Africa: 0.4 (0.4 - 0.4)
+Mean (95% CI) # of USA-origin variant sublineages = 1059 (1010 - 1108)
+Percent of USA-origin variant sublineages = 92.21
+% of intl sequences from USA: 66.4 (66.2 - 66.6)
+Mean (95%CI) # of sublins pre-intervention = 106 (83 - 129)
+Mean (95%CI) # of sublins pre-intervention from focal = 1 (0 - 2)
+Proportion of sublins pre-intervention from focal = 0.01 (0 - 0.02)
+Mean (95%CI) # of sublins during intervention = 290 (273 - 306)
+Mean (95%CI) # of sublins during intervention from focal = 2 (1 - 2)
+Proportion of sublins during-intervention from focal = 0.01 (0 - 0.01)
+Mean (95%CI) # of sublins after intervention = 753 (705 - 800)
+Mean (95%CI) # of sublins after intervention = 2 (1 - 2)
+Proportion of sublins post-intervention from focal = 0 (0 - 0)
+Fold reduction in proportion of sublins pre vs during-intervention from focal = 1.75 (0.4 - 3.1)
+Biggest sublineage = BA.1.1.can.EPI_ISL_7015154
+Biggest sublineage, short = BA.1.1.can2
+Most likely origin: USA, % support: 90, Mean lik: 0.96, Support*lik: 0.86
+Origin TMRCA mean (95%CI): 2021-11-05 (2021-10-26 - 2021-11-14)
+First sample in Can, mean (95%CI): 2021-11-24 (2021-11-22 - 2021-11-25)
+Most likely destination: Ontario, % support: 70, Mean lik: 0.86, Support*lik: 0.6
+Detection lag [days]: 19.3 (9.73 - 28.87)
+Number desc in boot: 4384 (-155 - 8924)
+Number desc in boot in Can: 1473 (113 - 2833)
+Number desc in boot in US: 896 (-436 - 2228)
+Number desc in boot in focal source: 7 (1 - 14)
+n unique desc across boots: 22777
+Max weekly sublin importation rate overall on 2021-12-20: 138.99 (121.27 - 156.7)
+Max weekly sublin importation rate from South Africa on 2021-11-18: 0.93 (0.1 - 1.76)
+Max weekly sublin importation rate from Africa on 2021-12-16: 0.93 (0.37 - 1.49)
+Max weekly sublin importation rate from USA on 2021-12-21: 128.23 (114.87 - 141.59)
+Weekly sublin importation rate pre-int from South Africa on 2021-11-26: 0.48 (0.18 - 0.77)
+Weekly sublin importation rate pre-int from Africa on 2021-11-26: 0.34 (0.07 - 0.61)
+Weekly sublin importation rate 2-weeks post-int from South Africa on 2021-12-10: 0 (0 - 0)
+Weekly sublin importation rate 2-weeks post-int from Africa on 2021-12-10: 0.66 (0.25 - 1.06)
+Fold decrease sublin rate pre-int to 2-weeks after int from South Africa: 0.49 (-0.03 - 1)
+Fold decrease sublin rate pre-int to 2-weeks after int from Africa: 0.49 (-0.03 - 1)
+Fold decrease sublin rate pre-int to 4-weeks after int from South Africa: 0.52 (0.13 - 0.92)
+Fold decrease sublin rate pre-int to 4-weeks after int from Africa: 0.52 (0.13 - 0.92)
+# sublineages with >=100 desc: 20 (18 - 23), accounting for 1.7 (1.6 - 1.9)% of sublineages and 51.3 (44.9 - 57.8)% of Canadian descendants
+# sublineages with >=500 desc: 8 (7 - 9), accounting for 0.7 (0.6 - 0.8)% of sublineages and 41.9 (35.4 - 48.3)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 4423 (4223 - 4624)
+Total intros, singles + sublins (mean, 95%CI)= 5572 (5337 - 5806)
+Proportion singletons of all intros = 79.4 (78.8 - 79.9)
+Proportion intros with >99 desc = 0.4 (0.3 - 0.4)
+Proportion intros with >=500 desc = 0.1 (0.1 - 0.2)
+Percent singletons fromUSA= 90 (89 - 91)
+Percent singletons fromEurope= 5 (4 - 5)
+Percent singletons fromUnited Kingdom= 3 (3 - 3)
+Percent singletons fromAsia= 1 (0 - 1)
+Percent singletons fromJapan= 1 (1 - 1)
+Percent singletons fromGermany= 0 (0 - 0)
+Percent singletons fromFrance= 0 (0 - 0)
+Percent singletons fromAfrica= 0 (0 - 0)
+Percent singletons fromSouth Africa= 0 (0 - 0)
+Percent singletons fromSouth America= 0 (0 - 0)
+Percent singletons fromNorth America= 0 (0 - 0)
+Percent sublineages from USA= 92 (91 - 93)
+Percent sublineages from Europe= 4 (3 - 4)
+Percent sublineages from United Kingdom= 2 (2 - 3)
+Percent sublineages from Japan= 1 (1 - 2)
+Percent sublineages from South Africa= 0 (0 - 0)
+Percent sublineages from Asia= 0 (0 - 0)
+Percent sublineages from Africa= 0 (0 - 0)
+Sublineages observed during restrictions: 1
+Sublineages predicted (from mean sublin rate) during restrictions: 1.5
+Sublineages averted (from mean sublin rate) during restrictions: 0.5
+Mean cases (sublin desc) averted, all source distrib, mean: 0 (0 - 0)
+Mean cases (sublin desc) averted, focal distrib, mean: 0 (0 - 0)
+Singletons observed during restrictions: 2.5
+Singletons predicted (from mean single rate) during restrictions: 0.7
+Singletons averted (from mean single rate) during restrictions: -1.8
+TOTAL mean cases averted, sublins+singles, all source distrib: -1.8
+TOTAL mean cases averted, sublins+singles, focal distrib: -1.8
+Sublineages observed during restrictions: 2
+Sublineages predicted (from mean sublin rate) during restrictions: 20
+Sublineages averted (from mean sublin rate) during restrictions: 18
+Mean cases (sublin desc) averted, all source distrib, mean: 4174.7 (4023 - 4326.5)
+Mean cases (sublin desc) averted, focal distrib, mean: 409.7 (407.1 - 412.4)
+Singletons observed during restrictions: 5.1
+Singletons predicted (from mean single rate) during restrictions: 13.5
+Singletons averted (from mean single rate) during restrictions: 8.4
+TOTAL mean cases averted, sublins+singles, all source distrib: 4183.1
+TOTAL mean cases averted, sublins+singles, focal distrib: 418.1
+Total estimated BA.1.1 cases in Canada: 779903
+Percentage averted of total Canadian cases: 0.5

@@ -1,0 +1,109 @@
+variant = BA1
+focal source geography = South Africa
+focal source geography = Africa
+lsd folder = ../02_trees/BA_analysis/BA1_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Southern Africa entry ban, from 2021-11-26 - 2021-12-18
+Intervention duration=22
+First Can sample: 2021-11-09
+Intervention delay = 17
+n.boots = 10
+folder.out = 2023-07-05_BA1_analysis/
+Mean (95%CI) # of sublins = 615 (596 - 633)
+Mean (95%CI) # of unique pango lins = 1 (1 - 1)
+Mean (95%CI) # of descendants = 24366 (22419 - 26313)
+Mean (95%CI) # of intl descendants = 5625 (3951 - 7299)
+Mean (95%CI) # of Can descendants = 18741 (18441 - 19040)
+Mean (95% CI) # of Southern Africa-origin variant sublineages = 6 (3 - 9)
+Percent of Southern Africa-origin variant sublineages = 1
+% of intl sequences from South Africa: 1.9 (1.9 - 1.9)
+% of intl sequences from Africa: 1.9 (1.9 - 1.9)
+Mean (95% CI) # of USA-origin variant sublineages = 440 (427 - 454)
+Percent of USA-origin variant sublineages = 71.64
+% of intl sequences from USA: 39.8 (39.6 - 40)
+Mean (95%CI) # of sublins pre-intervention = 66 (63 - 70)
+Mean (95%CI) # of sublins pre-intervention from focal = 2 (1 - 3)
+Proportion of sublins pre-intervention from focal = 0.03 (0.01 - 0.05)
+Mean (95%CI) # of sublins during intervention = 227 (217 - 237)
+Mean (95%CI) # of sublins during intervention from focal = 3 (2 - 4)
+Proportion of sublins during-intervention from focal = 0.01 (0.01 - 0.02)
+Mean (95%CI) # of sublins after intervention = 322 (310 - 334)
+Mean (95%CI) # of sublins after intervention = 2 (1 - 2)
+Proportion of sublins post-intervention from focal = 0 (0 - 0.01)
+Fold reduction in proportion of sublins pre vs during-intervention from focal = 2.43 (1.25 - 3.62)
+Biggest sublineage = BA.1.can.EPI_ISL_7370472
+Biggest sublineage, short = BA.1.can6
+Most likely origin: USA, % support: 50, Mean lik: 0.99, Support*lik: 0.49
+Origin TMRCA mean (95%CI): 2021-11-14 (2021-11-03 - 2021-11-25)
+First sample in Can, mean (95%CI): 2021-11-27 (2021-11-26 - 2021-11-28)
+Most likely destination: Ontario, % support: 50, Mean lik: 1, Support*lik: 0.5
+Detection lag [days]: 13.1 (2.81 - 23.39)
+Number desc in boot: 2339 (-97 - 4775)
+Number desc in boot in Can: 869 (-234 - 1972)
+Number desc in boot in US: 311 (184 - 438)
+Number desc in boot in focal source: 57 (38 - 77)
+n unique desc across boots: 29692
+Max weekly sublin importation rate overall on 2021-12-17: 99.93 (87.93 - 111.93)
+Max weekly sublin importation rate from South Africa on 2021-12-03: 1.78 (0.91 - 2.65)
+Max weekly sublin importation rate from Africa on 2021-12-03: 1.78 (0.91 - 2.65)
+Max weekly sublin importation rate from USA on 2021-12-17: 74.2 (70.98 - 77.42)
+Weekly sublin importation rate pre-int from South Africa on 2021-11-26: 1.13 (0.5 - 1.75)
+Weekly sublin importation rate pre-int from Africa on 2021-11-26: 1.13 (0.5 - 1.75)
+Weekly sublin importation rate 2-weeks post-int from South Africa on 2021-12-10: 0.81 (0.37 - 1.25)
+Weekly sublin importation rate 2-weeks post-int from Africa on 2021-12-10: 0.81 (0.37 - 1.25)
+Fold decrease sublin rate pre-int to 2-weeks after int from South Africa: 1.68 (0.2 - 3.16)
+Fold decrease sublin rate pre-int to 2-weeks after int from Africa: 1.68 (0.2 - 3.16)
+Fold decrease sublin rate pre-int to 4-weeks after int from South Africa: 1.82 (-0.13 - 3.76)
+Fold decrease sublin rate pre-int to 4-weeks after int from Africa: 1.82 (-0.13 - 3.76)
+# sublineages with >=100 desc: 23 (22 - 24), accounting for 3.7 (3.5 - 3.9)% of sublineages and 71.9 (69.8 - 74)% of Canadian descendants
+# sublineages with >=500 desc: 8 (6 - 9), accounting for 1.2 (1 - 1.4)% of sublineages and 58.4 (56.2 - 60.6)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 3019 (2920 - 3119)
+Total intros, singles + sublins (mean, 95%CI)= 3634 (3524 - 3744)
+Proportion singletons of all intros = 83.1 (82.6 - 83.5)
+Proportion intros with >99 desc = 0.6 (0.6 - 0.7)
+Proportion intros with >=500 desc = 0.2 (0.2 - 0.2)
+Percent singletons fromUSA= 74 (73 - 75)
+Percent singletons fromUnited Kingdom= 12 (12 - 13)
+Percent singletons fromEurope= 11 (10 - 11)
+Percent singletons fromSouth Africa= 2 (1 - 2)
+Percent singletons fromBrazil= 1 (1 - 1)
+Percent singletons fromOceania= 0 (0 - 0)
+Percent singletons fromFrance= 0 (0 - 0)
+Percent singletons fromAfrica= 0 (0 - 0)
+Percent singletons fromAsia= 0 (0 - 0)
+Percent singletons fromSpain= 0 (0 - 0)
+Percent singletons fromGermany= 0 (0 - 0)
+Percent sublineages from USA= 72 (70 - 73)
+Percent sublineages from United Kingdom= 16 (14 - 17)
+Percent sublineages from Europe= 11 (10 - 12)
+Percent sublineages from South Africa= 1 (1 - 2)
+Percent sublineages from Brazil= 0 (0 - 1)
+Sublineages observed during restrictions: 3.4
+Sublineages predicted (from mean sublin rate) during restrictions: 10.3
+Sublineages averted (from mean sublin rate) during restrictions: 6.8
+Mean cases (sublin desc) averted, all source distrib, mean: 2341.3 (2167.8 - 2514.8)
+Mean cases (sublin desc) averted, focal distrib, mean: 273.5 (263.5 - 283.5)
+Singletons observed during restrictions: 14.2
+Singletons predicted (from mean single rate) during restrictions: 17.1
+Singletons averted (from mean single rate) during restrictions: 2.9
+TOTAL mean cases averted, sublins+singles, all source distrib: 2344.2
+TOTAL mean cases averted, sublins+singles, focal distrib: 276.4
+Total estimated BA.1 cases in Canada: 634334
+Percentage averted of total Canadian cases: 0.4
+Max weekly singles importation rate overall on 2021-12-27: 566.73 (526.68 - 606.77)
+Max weekly singles importation rate overall on 2021-12-27: 566.73 (526.68 - 606.77)
+Max weekly singles importation rate from South Africa on : -Inf ( - )
+Max weekly singles importation rate from Africa on : -Inf ( - )
+Max weekly singles importation rate from USA on : -Inf ( - )
+Max weekly singles importation rate overall on 2021-12-27: 566.73 (526.68 - 606.77)
+Max weekly singles importation rate from South Africa on 2021-12-17: 7.7 (6.36 - 9.04)
+Max weekly singles importation rate from Africa on 2021-12-17: 7.7 (6.36 - 9.04)
+Max weekly singles importation rate from USA on 2021-12-26: 422.4 (395.83 - 448.97)
+Weekly singles importation rate pre-int from South Africa on 2021-11-26: 0 (0 - 0)
+Weekly singles importation rate pre-int from Africa on 2021-11-26: 2.17 (0.25 - 4.1)
+Weekly singles importation rate 2-weeks post-int from South Africa on 2021-12-10: 0.16 (-0.03 - 0.35)
+Weekly singles importation rate 2-weeks post-int from Africa on 2021-12-10: 4.94 (4.02 - 5.87)
+Fold decrease singles rate pre-int to 2-weeks after int from South Africa: 0.39 (0.02 - 0.75)
+Fold decrease singles rate pre-int to 2-weeks after int from Africa: 0.39 (0.02 - 0.75)
+Fold decrease singles rate pre-int to 4-weeks after int from South Africa: 0.25 (-0.01 - 0.5)
+Fold decrease singles rate pre-int to 4-weeks after int from Africa: 0.25 (-0.01 - 0.5)

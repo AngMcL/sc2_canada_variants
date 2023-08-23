@@ -1,0 +1,48 @@
+variant = eta
+focal source geography = Africa
+lsd folder = ../02_trees/202208_analysis/eta_lsd_out
+var-specific intervention = FALSE
+n.boots = 10
+folder.out = 2023-07-10_eta_analysis/
+Mean (95%CI) # of sublins = 24 (23 - 24)
+Mean (95%CI) # of unique pango lins = 1 (1 - 1)
+Mean (95%CI) # of descendants = 1849 (1822 - 1875)
+Mean (95%CI) # of intl descendants = 87 (62 - 112)
+Mean (95%CI) # of Can descendants = 1762 (1759 - 1764)
+Mean (95% CI) # of Africa-origin variant sublineages = 19 (18 - 20)
+Percent of Africa-origin variant sublineages = 79.9
+% of intl sequences from Africa: 20.2 (20.2 - 20.2)
+Mean (95% CI) # of USA-origin variant sublineages = 0 (0 - 1)
+Percent of USA-origin variant sublineages = 1.67
+% of intl sequences from USA: 18.3 (18.3 - 18.3)
+Mean (95% CI) # of Africa-origin variant sublineages = 19 (18 - 20)
+Percent of Africa-origin variant sublineages = 79.92
+Max weekly sublin importation rate overall on 2021-01-28: 2.13 (1.17 - 3.09)
+Max weekly sublin importation rate from Africa on 2021-03-14: 1.89 (1.81 - 1.97)
+Max weekly sublin importation rate from USA on 2020-10-06: 0.36 (0 - 0.72)
+Max weekly sublin importation rate from USA on 2020-10-07: 0.36 (0 - 0.72)
+Max weekly sublin importation rate from USA on 2020-10-10: 0.36 (0 - 0.72)
+Max weekly sublin importation rate from USA on 2020-10-25: 0.36 (0.05 - 0.67)
+Max weekly sublin importation rate from USA on 2020-12-04: 0.36 (0.02 - 0.7)
+Max weekly sublin importation rate from USA on 2020-12-06: 0.36 (0.06 - 0.65)
+Max weekly sublin importation rate from USA on 2020-12-08: 0.36 (0.02 - 0.7)
+Max weekly sublin importation rate from USA on 2021-03-30: 0.36 (0.02 - 0.7)
+# sublineages with >=100 desc: 3 (3 - 3), accounting for 12.6 (12.3 - 12.8)% of sublineages and 87.3 (87.3 - 87.3)% of Canadian descendants
+# sublineages with >=500 desc: 1 (1 - 1), accounting for 4.2 (4.1 - 4.3)% of sublineages and 68.3 (68.3 - 68.3)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 38 (36 - 41)
+Total intros, singles + sublins (mean, 95%CI)= 62 (60 - 65)
+Proportion singletons of all intros = 61.6 (60.4 - 62.7)
+Proportion intros with >99 desc = 4.8 (4.7 - 5)
+Proportion intros with >=500 desc = 1.6 (1.6 - 1.7)
+Max weekly singles importation rate overall on 2020-12-04: 3.57 (3.57 - 3.57)
+Max weekly singles importation rate from Africa on 2021-01-08: 3.17 (2.83 - 3.52)
+Max weekly singles importation rate from USA on : -Inf ( - )
+Percent singletons fromAfrica= 72 (68 - 75)
+Percent singletons fromIndia= 11 (10 - 13)
+Percent singletons fromEurope= 7 (3 - 11)
+Percent singletons fromGermany= 0 (0 - 1)
+Percent singletons fromAsia= 2 (0 - 3)
+Percent sublineages from Africa= 80 (75 - 85)
+Percent sublineages from Europe= 10 (6 - 14)
+Percent sublineages from Germany= 0 (-1 - 1)
+Percent sublineages from France= 4 (3 - 5)

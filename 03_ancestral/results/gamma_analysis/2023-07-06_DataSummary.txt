@@ -1,0 +1,69 @@
+variant = gamma
+focal source geography = Brazil
+lsd folder = ../02_trees/202208_analysis/gamma_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Brazil enhanced screening, from 2021-03-30 - 2021-04-14
+Intervention duration=15
+First Can sample: 2020-12-04
+Intervention delay = 116
+n.boots = 10
+folder.out = 2023-07-06_gamma_analysis/
+Mean (95%CI) # of sublins = 38 (37 - 40)
+Mean (95%CI) # of unique pango lins = 5 (5 - 5)
+Mean (95%CI) # of descendants = 15727 (15620 - 15833)
+Mean (95%CI) # of intl descendants = 2357 (2255 - 2458)
+Mean (95%CI) # of Can descendants = 13370 (13360 - 13380)
+Mean (95% CI) # of Brazil-origin variant sublineages = 20 (19 - 22)
+Percent of Brazil-origin variant sublineages = 52.5
+% of intl sequences from Brazil: 86.7 (86.6 - 86.8)
+Mean (95% CI) # of USA-origin variant sublineages = 11 (10 - 12)
+Percent of USA-origin variant sublineages = 29.35
+% of intl sequences from USA: 3.4 (3.4 - 3.5)
+Mean (95%CI) # of sublins pre-intervention = 16 (13 - 18)
+Mean (95%CI) # of sublins pre-intervention from focal = 12 (10 - 14)
+Proportion of sublins pre-intervention from focal = 0.74 (0.7 - 0.79)
+Proportion of sublins pre-intervention (1) from focal = 0.84 (0.71 - 0.97)
+Mean (95%CI) # of sublins during intervention = 7 (6 - 8)
+Mean (95%CI) # of sublins during intervention (1) = 3 (2 - 4)
+Mean (95%CI) # of sublins during intervention from focal = 3 (3 - 4)
+Proportion of sublins during-intervention (2) from focal = 0.48 (0.42 - 0.55)
+Proportion of sublins during-intervention (1) from focal = 0.78 (0.65 - 0.92)
+Mean (95%CI) # of sublins after intervention = 16 (15 - 17)
+Mean (95%CI) # of sublins after intervention = 5 (4 - 6)
+Proportion of sublins post-intervention from focal = 0.32 (0.26 - 0.37)
+Fold reduction in proportion of sublins pre vs during-intervention from focal = 1.6 (1.27 - 1.93)
+Fold reduction in proportion of sublins pre vs during-intervention 1 from focal = 1.16 (0.8 - 1.53)
+Max weekly sublin importation rate overall on 2021-04-10: 3.33 (2.05 - 4.6)
+Max weekly sublin importation rate from Brazil on 2021-03-07: 1.97 (1.34 - 2.6)
+Max weekly sublin importation rate from Brazil on 2021-03-08: 1.97 (1.31 - 2.64)
+Max weekly sublin importation rate from USA on 2021-04-13: 2.01 (1.77 - 2.26)
+Weekly sublin importation rate pre-int from Brazil on 2021-03-30: 0.7 (0.3 - 1.1)
+Weekly sublin importation rate 2-weeks post-int from Brazil on 2021-04-13: 1.21 (0.8 - 1.63)
+Fold decrease sublin rate pre-int to 2-weeks after int 2 from Brazil: 0.6 (0.21 - 0.99)
+Fold decrease sublin rate pre-int to 4-weeks after int 2 from Brazil: 1.08 (-0.04 - 2.2)
+Weekly sublin importation rate pre-int.1 from Brazil on 2021-01-15: 0.24 (0.06 - 0.42)
+Weekly sublin importation rate 2-weeks post-int.1 from Brazil on 2021-01-29: 0.6 (0.05 - 1.15)
+Fold decrease sublin rate pre-int to 2-weeks after int 1 from Brazil: 1.47 (-0.34 - 3.28)
+Fold decrease sublin rate pre-int to 4-weeks after int 1 from Brazil: 1 (-3.3 - 5.3)
+# sublineages with >=100 desc: 2 (1 - 2), accounting for 4.4 (2.9 - 6)% of sublineages and 96.7 (96.4 - 96.9)% of Canadian descendants
+# sublineages with >=500 desc: 1 (1 - 1), accounting for 2.9 (2.3 - 3.5)% of sublineages and 96.2 (95.7 - 96.7)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 159 (148 - 170)
+Total intros, singles + sublins (mean, 95%CI)= 198 (187 - 209)
+Percent singletons of all intros = 80.4 (79.1 - 81.7)
+Percent intros with >99 desc = 0.9 (0.6 - 1.2)
+Percent intros with >=500 desc = 0.6 (0.4 - 0.7)
+Max weekly singles importation rate overall on 2021-03-31: 12.19 (9.79 - 14.58)
+Max weekly singles importation rate from Brazil on 2021-03-31: 9.59 (8.14 - 11.03)
+Max weekly singles importation rate from USA on 2021-04-23: 3.79 (3.44 - 4.13)
+Weekly singles importation rate pre-int from Brazil on 2021-03-30: 9.49 (8.16 - 10.81)
+Weekly singles importation rate 2-weeks post-int from Brazil on 2021-04-13: 5.57 (4.57 - 6.57)
+Fold decrease singles rate pre-int to 2-weeks after int from Brazil: 1.89 (1.26 - 2.53)
+Fold decrease singles rate pre-int to 4-weeks after int from Brazil: 2.61 (1.82 - 3.39)
+Percent singletons fromBrazil= 65 (63 - 67)
+Percent singletons fromUSA= 22 (20 - 24)
+Percent singletons fromNorth America= 6 (3 - 8)
+Percent singletons fromSouth America= 7 (6 - 8)
+Percent sublineages from Brazil= 52 (50 - 55)
+Percent sublineages from USA= 29 (26 - 32)
+Percent sublineages from South America= 12 (10 - 14)
+Percent sublineages from North America= 6 (5 - 8)

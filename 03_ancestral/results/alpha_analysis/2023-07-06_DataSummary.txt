@@ -1,0 +1,146 @@
+variant = alpha
+focal source geography = United Kingdom
+lsd folder = ../02_trees/202208_analysis/alpha_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: UK flight ban, from 2020-12-20 - 2021-01-06
+Intervention duration=17
+n.boots = 10
+folder.out = 2023-07-06_alpha_analysis/
+Mean (95%CI) # of sublins = 235 (219 - 252)
+Mean (95%CI) # of unique pango lins = 3 (2 - 4)
+Mean (95%CI) # of descendants = 25527 (25059 - 25995)
+Mean (95%CI) # of intl descendants = 7118 (-12871 - 27107)
+Mean (95%CI) # of Can descendants = 18409 (-1120 - 37938)
+Mean (95% CI) # of UK-origin variant sublineages = 98 (86 - 110)
+Percent of UK-origin variant sublineages = 41.8
+% of intl sequences from United Kingdom: 19.8 (19.5 - 20.2)
+Mean (95% CI) # of USA-origin variant sublineages = 56 (48 - 64)
+Percent of USA-origin variant sublineages = 23.7
+% of intl sequences from USA: 17.8 (17.3 - 18.3)
+Biggest sublineage = B.1.1.7.can.EPI_ISL_2524151
+Biggest sublineage, short = B.1.1.7.can28
+Most likely origin: Europe, % support: 30, Mean lik: 1, Support*lik: 0.3
+Origin TMRCA mean (95%CI): 2020-10-09 (2020-09-17 - 2020-10-31)
+First sample in Can, mean (95%CI): 2021-01-25 (2021-01-25 - 2021-01-25)
+Most likely destination: Ontario, % support: 20, Mean lik: 0.88, Support*lik: 0.18
+Detection lag [days]: 108 (86.34 - 129.66)
+Number desc in boot: 4585 (4532 - 4637)
+Number desc in boot in Can: 4580 (4523 - 4637)
+Number desc in boot in US: 2 (-1 - 4)
+Number desc in boot in focal source: 0 (0 - 0)
+n unique desc across boots: 7338
+Max weekly sublin importation rate overall on 2021-02-01: 17.54 (12.68 - 22.39)
+Max weekly sublin importation rate from United Kingdom on 2021-03-04: 7.54 (6.35 - 8.72)
+Max weekly sublin importation rate from USA on 2021-01-10: 4.86 (3.35 - 6.37)
+Max weekly sublin importation rate from USA on 2021-02-03: 4.86 (4.06 - 5.66)
+Weekly sublin importation rate pre-int from United Kingdom on 2020-12-20: 5.14 (3.9 - 6.39)
+Weekly sublin importation rate 2-weeks post-int from United Kingdom on 2021-01-03: 3.79 (2.43 - 5.15)
+# sublineages with >=100 desc: 27 (25 - 29), accounting for 11.6 (10.5 - 12.7)% of sublineages and 64.8 (-4 - 133.6)% of Canadian descendants
+# sublineages with >=500 desc: 10 (9 - 11), accounting for 4.1 (4.1 - 4.2)% of sublineages and 52.3 (-3.3 - 107.9)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 467 (418 - 515)
+Total intros, singles + sublins (mean, 95%CI)= 700 (670 - 730)
+Proportion singletons of all intros = 66.7 (61.8 - 71.5)
+Proportion intros with >99 desc = 3.9 (3.6 - 4.2)
+Proportion intros with >=500 desc = 1.4 (1.3 - 1.5)
+Max weekly singles importation rate overall on 2021-01-09: 35.38 (27.39 - 43.37)
+Max weekly singles importation rate from United Kingdom on 2021-01-09: 21.43 (18.84 - 24.02)
+Max weekly singles importation rate from USA on 2021-02-17: 9.05 (6.03 - 12.07)
+Max weekly singles importation rate from USA on 2021-02-18: 9.05 (6.55 - 11.54)
+Max weekly singles importation rate from USA on 2021-03-08: 9.05 (7.17 - 10.92)
+Weekly singles importation rate pre-int from United Kingdom on 2020-12-20: 17.05 (10.79 - 23.31)
+Weekly singles importation rate 2-weeks post-int from United Kingdom on 2021-01-03: 16.9 (12.25 - 21.56)
+First Can sample: 2020-11-06
+Intervention delay = 44
+Mean (95%CI) # of sublins = 235 (219 - 252)
+Mean (95%CI) # of unique pango lins = 3 (2 - 4)
+Mean (95%CI) # of descendants = 25527 (25059 - 25995)
+Mean (95%CI) # of intl descendants = 7118 (-12871 - 27107)
+Mean (95%CI) # of Can descendants = 18409 (-1120 - 37938)
+Mean (95% CI) # of UK-origin variant sublineages = 98 (86 - 110)
+Percent of UK-origin variant sublineages = 41.8
+% of intl sequences from United Kingdom: 19.8 (19.5 - 20.2)
+Mean (95% CI) # of USA-origin variant sublineages = 56 (48 - 64)
+Percent of USA-origin variant sublineages = 23.7
+% of intl sequences from USA: 17.8 (17.3 - 18.3)
+Mean (95%CI) # of sublins = 235 (219 - 252)
+Mean (95%CI) # of unique pango lins = 3 (2 - 4)
+Mean (95%CI) # of descendants = 25527 (25059 - 25995)
+Mean (95%CI) # of intl descendants = 7118 (-12871 - 27107)
+Mean (95%CI) # of Can descendants = 18409 (-1120 - 37938)
+Mean (95% CI) # of UK-origin variant sublineages = 98 (86 - 110)
+Percent of UK-origin variant sublineages = 41.8
+% of intl sequences from United Kingdom: 19.8 (19.5 - 20.2)
+Mean (95% CI) # of USA-origin variant sublineages = 56 (48 - 64)
+Percent of USA-origin variant sublineages = 23.7
+% of intl sequences from USA: 17.8 (17.3 - 18.3)
+Mean (95%CI) # of sublins = 235 (219 - 252)
+Mean (95%CI) # of unique pango lins = 3 (2 - 4)
+Mean (95%CI) # of descendants = 25527 (25059 - 25995)
+Mean (95%CI) # of intl descendants = 7118 (-12871 - 27107)
+Mean (95%CI) # of Can descendants = 18409 (-1120 - 37938)
+Mean (95% CI) # of UK-origin variant sublineages = 98 (86 - 110)
+Percent of UK-origin variant sublineages = 41.8
+% of intl sequences from United Kingdom: 19.8 (19.5 - 20.2)
+Mean (95% CI) # of USA-origin variant sublineages = 56 (48 - 64)
+Percent of USA-origin variant sublineages = 23.7
+% of intl sequences from USA: 17.8 (17.3 - 18.3)
+Mean (95%CI) # of sublins = 234 (228 - 240)
+Mean (95%CI) # of unique pango lins = 3 (2 - 3)
+Mean (95%CI) # of descendants = 25565 (25330 - 25801)
+Mean (95%CI) # of intl descendants = 3440 (-2224 - 9104)
+Mean (95%CI) # of Can descendants = 22125 (16564 - 27687)
+Mean (95% CI) # of UK-origin variant sublineages = 94 (89 - 98)
+Percent of UK-origin variant sublineages = 40
+% of intl sequences from United Kingdom: 19.8 (19.7 - 19.9)
+Mean (95% CI) # of USA-origin variant sublineages = 54 (51 - 56)
+Percent of USA-origin variant sublineages = 22.97
+% of intl sequences from USA: 17.9 (17.8 - 18)
+Mean (95%CI) # of sublins pre-intervention = 36 (35 - 38)
+Mean (95%CI) # of sublins pre-intervention from focal = 18 (17 - 19)
+Proportion of sublins pre-intervention from focal = 0.5 (0.46 - 0.53)
+Mean (95%CI) # of sublins during intervention = 20 (18 - 23)
+Mean (95%CI) # of sublins during intervention from focal = 9 (8 - 11)
+Proportion of sublins during-intervention from focal = 0.46 (0.39 - 0.53)
+Mean (95%CI) # of sublins after intervention = 177 (170 - 183)
+Mean (95%CI) # of sublins after intervention = 66 (61 - 71)
+Proportion of sublins post-intervention from focal = 0.37 (0.35 - 0.4)
+Fold reduction in proportion of sublins pre vs during-intervention from focal = 1.14 (0.89 - 1.38)
+Biggest sublineage = B.1.1.7.can.EPI_ISL_2524151
+Biggest sublineage, short = B.1.1.7.can28
+Most likely origin: Europe, % support: 50, Mean lik: 0.9, Support*lik: 0.45
+Origin TMRCA mean (95%CI): 2020-10-30 (2020-08-29 - 2020-12-30)
+First sample in Can, mean (95%CI): 2021-01-25 (2021-01-25 - 2021-01-25)
+Most likely destination: British Columbia, % support: 20, Mean lik: 1, Support*lik: 0.2
+Detection lag [days]: 87.4 (26.19 - 148.61)
+Number desc in boot: 4524 (4333 - 4714)
+Number desc in boot in Can: 4519 (4331 - 4707)
+Number desc in boot in US: 1 (0 - 2)
+Number desc in boot in focal source: 0 (0 - 0)
+n unique desc across boots: 4584
+Max weekly sublin importation rate overall on 2021-03-03: 17.79 (13.94 - 21.64)
+Max weekly sublin importation rate from United Kingdom on 2021-03-03: 7.59 (6.34 - 8.83)
+Max weekly sublin importation rate from USA on 2021-02-03: 5.01 (4.43 - 5.6)
+Weekly sublin importation rate pre-int from United Kingdom on 2020-12-20: 4.77 (3.57 - 5.97)
+Weekly sublin importation rate 2-weeks post-int from United Kingdom on 2021-01-03: 3.86 (2.79 - 4.92)
+Fold decrease sublin rate pre-int to 2-weeks after int from United Kingdom: 1.47 (0.82 - 2.11)
+Fold decrease sublin rate pre-int to 4-weeks after int from United Kingdom: 1.02 (0.61 - 1.44)
+# sublineages with >=100 desc: 26 (25 - 27), accounting for 11.1 (10.7 - 11.6)% of sublineages and 75.8 (56.3 - 95.4)% of Canadian descendants
+# sublineages with >=500 desc: 9 (8 - 10), accounting for 3.8 (3.5 - 4.1)% of sublineages and 61.2 (45.2 - 77.2)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 435 (413 - 458)
+Total intros, singles + sublins (mean, 95%CI)= 668 (647 - 690)
+Proportion singletons of all intros = 65.1 (63.6 - 66.6)
+Proportion intros with >99 desc = 3.9 (3.7 - 4)
+Proportion intros with >=500 desc = 1.3 (1.2 - 1.5)
+Max weekly singles importation rate overall on 2021-01-09: 35.38 (27.39 - 43.37)
+Max weekly singles importation rate from United Kingdom on 2021-01-09: 21.43 (18.84 - 24.02)
+Max weekly singles importation rate from USA on 2021-02-17: 9.05 (6.03 - 12.07)
+Max weekly singles importation rate from USA on 2021-02-18: 9.05 (6.55 - 11.54)
+Max weekly singles importation rate from USA on 2021-03-08: 9.05 (7.17 - 10.92)
+Weekly singles importation rate pre-int from United Kingdom on 2020-12-20: 17.05 (10.79 - 23.31)
+Weekly singles importation rate 2-weeks post-int from United Kingdom on 2021-01-03: 16.9 (12.25 - 21.56)
+Percent sublineages from United Kingdom= 40 (38 - 42)
+Percent sublineages from Europe= 31 (29 - 32)
+Percent sublineages from USA= 23 (22 - 24)
+Percent sublineages from Asia= 5 (4 - 6)
+Percent sublineages from Sweden= 0 (0 - 0)
+Percent sublineages from France= 1 (1 - 1)

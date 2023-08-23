@@ -1,0 +1,10 @@
+variant = gamma
+focal source geography = Brazil
+lsd folder = ../02_trees/202208_analysis/gamma_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Brazil enhanced screening, from 2021-03-30 - 2021-04-14
+Intervention duration=15
+First Can sample: 2020-12-04
+Intervention delay = 116
+n.boots = 10
+folder.out = 2023-07-31_gamma_analysis/

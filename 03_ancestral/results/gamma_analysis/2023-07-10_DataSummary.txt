@@ -1,0 +1,41 @@
+variant = gamma
+focal source geography = Brazil
+lsd folder = ../02_trees/202208_analysis/gamma_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Brazil enhanced screening, from 2021-03-30 - 2021-04-14
+Intervention duration=15
+First Can sample: 2020-12-04
+Intervention delay = 116
+n.boots = 10
+folder.out = 2023-07-06_gamma_analysis/
+Max weekly singles importation rate from Brazil on 2021-03-31: 9.59 (8.14 - 11.03)
+Max weekly singles importation rate from USA on 2021-04-23: 3.79 (3.44 - 4.13)
+Weekly singles importation rate pre-int from Brazil on 2021-03-30: 9.49 (8.16 - 10.81)
+Weekly singles importation rate 2-weeks post-int from Brazil on 2021-04-13: 5.57 (4.57 - 6.57)
+Fold decrease singles rate pre-int to 2-weeks after int from Brazil: 1.89 (1.26 - 2.53)
+Fold decrease singles rate pre-int to 4-weeks after int from Brazil: 2.61 (1.82 - 3.39)
+Weekly singles importation rate pre-int 1 from Brazil on 2021-01-15: NA (NA - NA)
+Weekly singles importation rate 2-weeks post-int 1 from Brazil on 2021-01-29: 4.65 (3 - 6.3)
+Fold decrease singles rate pre-int1 to 2-weeks after int1 from Brazil: NaN (NaN - NaN)
+Fold decrease singles rate pre-int1 to 4-weeks after int1 from Brazil: NaN (NaN - NaN)
+Mean (95% CI) # of Brazil-origin variant singletons = 104 (95 - 112)
+Mean (95%CI) # of singles pre-intervention = 82 (73 - 90)
+Mean (95%CI) # of singles pre-intervention from focal = 69 (62 - 76)
+Proportion of singles pre-intervention from focal = 0.85 (0.81 - 0.89)
+Mean (95%CI) # of singles during intervention = 20 (18 - 21)
+Mean (95%CI) # of singles during intervention from focal = 14 (12 - 15)
+Proportion of singles during-intervention from focal = 0.7 (0.64 - 0.76)
+Mean (95%CI) # of singles after intervention = 58 (54 - 62)
+Mean (95%CI) # of singles after intervention = 21 (18 - 24)
+Proportion of singles post-intervention from focal = 0.36 (0.32 - 0.4)
+Fold reduction in proportion of singles pre vs during-intervention from focal = 1.23 (1.13 - 1.34)
+Mean (95%CI) # of singles pre-intervention 1 = 0 (0 - 1)
+Mean (95%CI) # of singles pre-intervention 1 from focal = 0 (0 - 1)
+Proportion of singles pre-intervention 1 from focal = NaN (NaN - NaN)
+Mean (95%CI) # of singles during intervention 1 = 31 (27 - 35)
+Mean (95%CI) # of singles during intervention 1 from focal = 27 (24 - 31)
+Proportion of singles during-intervention 1 from focal = 0.9 (0.86 - 0.93)
+Mean (95%CI) # of singles after intervention 1 = 128 (120 - 137)
+Mean (95%CI) # of singles after intervention 1 = 76 (69 - 83)
+Proportion of singles post-intervention 1 from focal = 0.59 (0.56 - 0.62)
+Fold reduction in proportion of singles pre vs during-intervention 1 from focal = NaN (NaN - NaN)

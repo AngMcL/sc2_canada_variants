@@ -1,0 +1,10 @@
+variant = delta
+focal source geography = India
+lsd folder = ../02_trees/202208_analysis/delta_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: India flight ban, from 2021-04-22 - 2021-09-26
+Intervention duration=157
+First Can sample: 2021-03-06
+Intervention delay = 47
+n.boots = 7
+folder.out = 2023-07-31_delta_analysis/

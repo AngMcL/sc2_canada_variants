@@ -1,0 +1,10 @@
+variant = beta
+focal source geography = South Africa
+lsd folder = ../02_trees/202208_analysis/beta_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: South Africa enhanced screening, from 2020-12-24 - 2021-02-22
+Intervention duration=60
+First Can sample: 2020-12-19
+Intervention delay = 5
+n.boots = 10
+folder.out = 2023-07-31_beta_analysis/

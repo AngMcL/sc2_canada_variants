@@ -1,0 +1,66 @@
+variant = mu
+focal source geography = South America
+lsd folder = ../02_trees/202208_analysis/mu_lsd_out
+var-specific intervention = FALSE
+n.boots = 10
+folder.out = 2023-07-10_mu_analysis/
+Mean (95%CI) # of sublins = 7 (7 - 7)
+Mean (95%CI) # of unique pango lins = 2 (2 - 2)
+Mean (95%CI) # of descendants = 81 (80 - 82)
+Mean (95%CI) # of intl descendants = 10 (10 - 10)
+Mean (95%CI) # of Can descendants = 71 (71 - 72)
+Mean (95% CI) # of South America-origin variant sublineages = 2 (2 - 2)
+Percent of South America-origin variant sublineages = 28.2
+% of intl sequences from South America: 39.8 (39.8 - 39.8)
+Mean (95% CI) # of USA-origin variant sublineages = 5 (5 - 5)
+Percent of USA-origin variant sublineages = 71.83
+% of intl sequences from USA: 45.1 (45.1 - 45.1)
+Max weekly sublin importation rate overall on 2021-07-10: 1 (0.95 - 1.05)
+Max weekly sublin importation rate from South America on 2021-07-03: 0.94 (0.89 - 1)
+Max weekly sublin importation rate from South America on 2021-07-10: 0.94 (0.89 - 1)
+Max weekly sublin importation rate from USA on 2021-08-01: 0.96 (0.73 - 1.18)
+# sublineages with >=100 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+# sublineages with >=500 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 55 (54 - 55)
+Total intros, singles + sublins (mean, 95%CI)= 62 (62 - 62)
+Proportion singletons of all intros = 88.5 (88.1 - 89)
+Proportion intros with >99 desc = 0 (0 - 0)
+Proportion intros with >=500 desc = 0 (0 - 0)
+Max weekly singles importation rate overall on 2021-08-10: 11.51 (10.93 - 12.1)
+Max weekly singles importation rate from South America on 2021-06-19: 2.73 (2.7 - 2.76)
+Max weekly singles importation rate from USA on 2021-08-10: 10.49 (9.88 - 11.09)
+Percent singletons fromUSA= 79 (79 - 80)
+Percent singletons fromSouth America= 11 (11 - 11)
+Percent singletons fromNorth America= 9 (9 - 10)
+Percent sublineages from USA= 72 (71 - 73)
+Percent sublineages from South America= 28 (27 - 29)
+Mean (95%CI) # of sublins = 7 (7 - 7)
+Mean (95%CI) # of unique pango lins = 2 (2 - 2)
+Mean (95%CI) # of descendants = 81 (80 - 82)
+Mean (95%CI) # of intl descendants = 10 (10 - 10)
+Mean (95%CI) # of Can descendants = 71 (71 - 72)
+Mean (95% CI) # of South America-origin variant sublineages = 2 (2 - 2)
+Percent of South America-origin variant sublineages = 28.2
+% of intl sequences from South America: 39.8 (39.8 - 39.8)
+Mean (95% CI) # of USA-origin variant sublineages = 5 (5 - 5)
+Percent of USA-origin variant sublineages = 71.83
+% of intl sequences from USA: 45.1 (45.1 - 45.1)
+Max weekly sublin importation rate overall on 2021-07-10: 1 (0.95 - 1.05)
+Max weekly sublin importation rate from South America on 2021-07-03: 0.94 (0.89 - 1)
+Max weekly sublin importation rate from South America on 2021-07-10: 0.94 (0.89 - 1)
+Max weekly sublin importation rate from USA on 2021-08-01: 0.96 (0.73 - 1.18)
+# sublineages with >=100 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+# sublineages with >=500 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 55 (54 - 55)
+Total intros, singles + sublins (mean, 95%CI)= 62 (62 - 62)
+Proportion singletons of all intros = 88.5 (88.1 - 89)
+Proportion intros with >99 desc = 0 (0 - 0)
+Proportion intros with >=500 desc = 0 (0 - 0)
+Max weekly singles importation rate overall on 2021-08-10: 11.51 (10.93 - 12.1)
+Max weekly singles importation rate from South America on 2021-06-19: 2.73 (2.7 - 2.76)
+Max weekly singles importation rate from USA on 2021-08-10: 10.49 (9.88 - 11.09)
+Percent singletons fromUSA= 79 (79 - 80)
+Percent singletons fromSouth America= 11 (11 - 11)
+Percent singletons fromNorth America= 9 (9 - 10)
+Percent sublineages from USA= 72 (71 - 73)
+Percent sublineages from South America= 28 (27 - 29)

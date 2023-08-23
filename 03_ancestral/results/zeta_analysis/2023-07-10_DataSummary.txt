@@ -1,0 +1,65 @@
+variant = zeta
+focal source geography = Brazil
+lsd folder = ../02_trees/202208_analysis/zeta_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Brazil enhanced screening, from 2021-03-30 - 2021-04-14
+Intervention duration=15
+First Can sample: 2020-11-24
+Intervention delay = 126
+n.boots = 10
+folder.out = 2023-07-10_zeta_analysis/
+Mean (95%CI) # of sublins = 9 (9 - 9)
+Mean (95%CI) # of unique pango lins = 1 (1 - 1)
+Mean (95%CI) # of descendants = 232 (232 - 232)
+Mean (95%CI) # of intl descendants = 3 (3 - 3)
+Mean (95%CI) # of Can descendants = 229 (229 - 229)
+Mean (95% CI) # of Brazil-origin variant sublineages = 7 (7 - 7)
+Percent of Brazil-origin variant sublineages = 77.8
+% of intl sequences from Brazil: 58 (58 - 58)
+Mean (95% CI) # of USA-origin variant sublineages = 2 (2 - 2)
+Percent of USA-origin variant sublineages = 22.22
+% of intl sequences from USA: 25.7 (25.6 - 25.7)
+Mean (95% CI) # of Africa-origin variant sublineages = 0 (0 - 0)
+Percent of Africa-origin variant sublineages = 0
+Mean (95%CI) # of sublins pre-intervention = 9 (9 - 9)
+Mean (95%CI) # of sublins pre-intervention from focal = 7 (7 - 7)
+Proportion of sublins pre-intervention from focal = 0.78 (0.78 - 0.78)
+Mean (95%CI) # of sublins during intervention = 0 (0 - 0)
+Mean (95%CI) # of sublins during intervention from focal = 0 (0 - 0)
+Proportion of sublins during-intervention from focal = NaN (NaN - NaN)
+Mean (95%CI) # of sublins after intervention = 0 (0 - 0)
+Mean (95%CI) # of sublins after intervention = 0 (0 - 0)
+Proportion of sublins post-intervention from focal = NaN (NaN - NaN)
+Fold reduction in proportion of sublins pre vs during-intervention from focal = NaN (NaN - NaN)
+Max weekly sublin importation rate overall on 2020-10-10: 2.3 (2.27 - 2.33)
+Max weekly sublin importation rate from Brazil on 2020-10-16: 2.13 (2.1 - 2.16)
+Max weekly sublin importation rate from Brazil on 2020-10-17: 2.13 (2.1 - 2.16)
+Max weekly sublin importation rate from USA on 2021-01-31: 1.57 (1.57 - 1.57)
+Max weekly sublin importation rate from USA on 2021-02-01: 1.57 (1.57 - 1.57)
+Max weekly sublin importation rate from USA on 2021-02-02: 1.57 (1.57 - 1.57)
+Weekly sublin importation rate pre-int.1 from Brazil on 2021-01-15: 0 (0 - 0)
+Weekly sublin importation rate 2-weeks post-int.1 from Brazil on 2021-01-29: 0 (0 - 0)
+Fold decrease sublin rate pre-int to 2-weeks after int 1 from Brazil: NaN (NaN - NaN)
+Fold decrease sublin rate pre-int to 4-weeks after int 1 from Brazil: NaN (NaN - NaN)
+Weekly sublin importation rate pre-int from Brazil on 2021-03-30:  ( - )
+Weekly sublin importation rate 2-weeks post-int from Brazil on 2021-04-13:  ( - )
+Fold decrease sublin rate pre-int to 2-weeks after int from Brazil: NaN (NaN - NaN)
+Fold decrease sublin rate pre-int to 4-weeks after int from Brazil: NaN (NaN - NaN)
+# sublineages with >=100 desc: 1 (1 - 1), accounting for 11.1 (11.1 - 11.1)% of sublineages and 67.2 (67.2 - 67.2)% of Canadian descendants
+# sublineages with >=500 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 15 (15 - 15)
+Total intros, singles + sublins (mean, 95%CI)= 24 (24 - 24)
+Proportion singletons of all intros = 62.5 (62.5 - 62.5)
+Proportion intros with >99 desc = 4.2 (4.2 - 4.2)
+Proportion intros with >=500 desc = 0 (0 - 0)
+Max weekly singles importation rate overall on 2020-12-31: 4.21 (3.88 - 4.55)
+Max weekly singles importation rate from Brazil on 2020-12-30: 2.34 (2.03 - 2.66)
+Max weekly singles importation rate from USA on 2020-12-31: 1.97 (1.93 - 2.01)
+Weekly singles importation rate pre-int from Brazil on 2021-03-30: 0 (0 - 0)
+Weekly singles importation rate 2-weeks post-int from Brazil on 2021-04-13: 0.09 (0.03 - 0.14)
+Fold decrease singles rate pre-int to 2-weeks after int from Brazil: 0 (0 - 0)
+Fold decrease singles rate pre-int to 4-weeks after int from Brazil: NaN (NaN - NaN)
+Percent singletons fromBrazil= 65 (62 - 68)
+Percent singletons fromUSA= 33 (31 - 34)
+Percent sublineages from Brazil= 78 (78 - 78)
+Percent sublineages from USA= 22 (22 - 22)

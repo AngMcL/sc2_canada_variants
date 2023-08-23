@@ -1,0 +1,33 @@
+variant = beta
+focal source geography = South Africa
+lsd folder = ../02_trees/202208_analysis/beta_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: South Africa enhanced screening, from 2020-12-24 - 2021-02-22
+Intervention duration=60
+First Can sample: 2020-12-19
+Intervention delay = 5
+n.boots = 10
+folder.out = 2023-07-06_beta_analysis/
+Max weekly singles importation rate from South Africa on 2020-12-28: 1.57 (1.31 - 1.84)
+Max weekly singles importation rate from South Africa on 2020-12-29: 1.57 (1.35 - 1.8)
+Max weekly singles importation rate from South Africa on 2020-12-30: 1.57 (1.37 - 1.77)
+Max weekly singles importation rate from South Africa on 2020-12-31: 1.57 (1.39 - 1.75)
+Max weekly singles importation rate from USA on 2020-12-11: 1 (1 - 1)
+Max weekly singles importation rate from USA on 2020-12-25: 1 (0.75 - 1.25)
+Max weekly singles importation rate from USA on 2021-05-30: 1 (0.81 - 1.19)
+Max weekly singles importation rate from USA on 2021-06-02: 1 (0.95 - 1.05)
+Weekly singles importation rate pre-int from South Africa on 2020-12-24: 0.83 (0.56 - 1.1)
+Weekly singles importation rate 2-weeks post-int from South Africa on 2021-01-07: 0.13 (0 - 0.26)
+Fold decrease singles rate pre-int to 2-weeks after int from South Africa: 3.35 (0.56 - 6.14)
+Fold decrease singles rate pre-int to 4-weeks after int from South Africa: 1.81 (1 - 2.63)
+Mean (95% CI) # of South Africa-origin variant singletons = 6 (6 - 7)
+Mean (95%CI) # of singles pre-intervention = 1 (1 - 2)
+Mean (95%CI) # of singles pre-intervention from focal = 1 (1 - 1)
+Proportion of singles pre-intervention from focal = 0.9 (0.75 - 1.05)
+Mean (95%CI) # of singles during intervention = 20 (19 - 21)
+Mean (95%CI) # of singles during intervention from focal = 4 (4 - 5)
+Proportion of singles during-intervention from focal = 0.22 (0.18 - 0.26)
+Mean (95%CI) # of singles after intervention = 58 (56 - 61)
+Mean (95%CI) # of singles after intervention = 1 (0 - 2)
+Proportion of singles post-intervention from focal = 0.02 (0.01 - 0.03)
+Fold reduction in proportion of singles pre vs during-intervention from focal = 4.33 (3.21 - 5.45)

@@ -1,0 +1,92 @@
+variant = BA2
+focal source geography = South Africa
+focal source geography = Africa
+lsd folder = ../02_trees/BA_analysis/BA2_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: Southern Africa entry ban, enhanced screening, from 2021-11-26 - 2021-12-18
+Intervention duration=22
+First Can sample: 2021-11-29
+Intervention delay = -3
+n.boots = 10
+folder.out = 2023-07-06_BA2_analysis/
+Mean (95%CI) # of sublins = 87 (83 - 92)
+Mean (95%CI) # of unique pango lins = 1 (1 - 1)
+Mean (95%CI) # of descendants = 575 (470 - 681)
+Mean (95%CI) # of intl descendants = 215 (119 - 312)
+Mean (95%CI) # of Can descendants = 360 (345 - 375)
+Mean (95% CI) # of Southern Africa-origin variant sublineages = 0 (0 - 0)
+Percent of Southern Africa-origin variant sublineages = 0
+% of intl sequences from South Africa: 0.1 (0.1 - 0.1)
+% of intl sequences from Africa: 0.1 (0.1 - 0.1)
+Mean (95% CI) # of USA-origin variant sublineages = 0 (0 - 0)
+Percent of USA-origin variant sublineages = 0
+% of intl sequences from USA: 0.3 (0.2 - 0.3)
+Mean (95%CI) # of sublins pre-intervention = 6 (4 - 7)
+Mean (95%CI) # of sublins pre-intervention from focal = 0 (0 - 0)
+Proportion of sublins pre-intervention from focal = 0 (0 - 0)
+Mean (95%CI) # of sublins during intervention = 14 (12 - 16)
+Mean (95%CI) # of sublins during intervention from focal = 0 (0 - 0)
+Proportion of sublins during-intervention from focal = 0 (0 - 0)
+Mean (95%CI) # of sublins after intervention = 68 (64 - 71)
+Mean (95%CI) # of sublins after intervention = 0 (0 - 0)
+Proportion of sublins post-intervention from focal = 0 (0 - 0)
+Fold reduction in proportion of sublins pre vs during-intervention from focal = NaN (NaN - NaN)
+Biggest sublineage = BA.2.can.EPI_ISL_9917705
+Biggest sublineage, short = BA.2.can20
+Most likely origin: United Kingdom, % support: 40, Mean lik: 1, Support*lik: 0.4
+Origin TMRCA mean (95%CI): 2021-12-11 (2021-11-19 - 2022-01-02)
+First sample in Can, mean (95%CI): 2022-01-25 (2022-01-23 - 2022-01-27)
+Most likely destination: Ontario, % support: 100, Mean lik: 0.95, Support*lik: 0.95
+Detection lag [days]: 45.2 (22.99 - 67.41)
+Number desc in boot: 18 (6 - 30)
+Number desc in boot in Can: 10 (2 - 18)
+Number desc in boot in US: 0 (0 - 0)
+Number desc in boot in focal source: 0 (0 - 0)
+n unique desc across boots: 93
+Max weekly sublin importation rate overall on 2022-02-05: 9.67 (7.82 - 11.53)
+Max weekly sublin importation rate from South Africa on : -Inf ( - )
+Max weekly sublin importation rate from Africa on : -Inf ( - )
+Max weekly sublin importation rate from USA on : -Inf ( - )
+Weekly sublin importation rate pre-int from South Africa on 2021-11-26:  ( - )
+Weekly sublin importation rate pre-int from Africa on 2021-11-26:  ( - )
+Weekly sublin importation rate 2-weeks post-int from South Africa on 2021-12-10:  ( - )
+Weekly sublin importation rate 2-weeks post-int from Africa on 2021-12-10:  ( - )
+Fold decrease sublin rate pre-int to 2-weeks after int from South Africa: NaN (NaN - NaN)
+Fold decrease sublin rate pre-int to 2-weeks after int from Africa: NaN (NaN - NaN)
+Fold decrease sublin rate pre-int to 4-weeks after int from South Africa: NaN (NaN - NaN)
+Fold decrease sublin rate pre-int to 4-weeks after int from Africa: NaN (NaN - NaN)
+# sublineages with >=100 desc: 0 (0 - 1), accounting for 0.5 (0 - 0.9)% of sublineages and 2.7 (-0.4 - 5.8)% of Canadian descendants
+# sublineages with >=500 desc: 0 (0 - 0), accounting for 0 (0 - 0)% of sublineages and 0 (0 - 0)% of Canadian descendants
+Total singletons (mean, 95%CI)  = 462 (451 - 473)
+Total intros, singles + sublins (mean, 95%CI)= 549 (537 - 562)
+Proportion singletons of all intros = 84 (83 - 85)
+Proportion intros with >99 desc = 0.1 (0 - 0.1)
+Proportion intros with >=500 desc = 0 (0 - 0)
+Percent singletons fromUnited Kingdom= 34 (31 - 37)
+Percent singletons fromIndia= 33 (32 - 35)
+Percent singletons fromEurope= 12 (11 - 13)
+Percent singletons fromDenmark= 12 (10 - 13)
+Percent singletons fromAsia= 6 (5 - 8)
+Percent singletons fromGermany= 2 (1 - 2)
+Percent singletons fromSweden= 0 (0 - 1)
+Percent singletons fromUSA= 0 (0 - 0)
+Percent singletons fromFrance= 0 (0 - 0)
+Percent sublineages from India= 35 (30 - 39)
+Percent sublineages from United Kingdom= 31 (26 - 37)
+Percent sublineages from Denmark= 15 (12 - 18)
+Percent sublineages from Asia= 9 (7 - 11)
+Percent sublineages from Europe= 8 (6 - 11)
+Percent sublineages from Germany= 1 (0 - 2)
+Max weekly singles importation rate overall on 2022-01-31: 82.19 (74.39 - 89.98)
+Max weekly singles importation rate from South Africa on 2022-02-12: 0.86 (0.71 - 1)
+Max weekly singles importation rate from Africa on 2022-02-14: 0.86 (0.71 - 1)
+Max weekly singles importation rate from South Africa on 2022-02-26: 0.86 (0.11 - 1.61)
+Max weekly singles importation rate from USA on 2021-11-16: 3.29 (NA - NA)
+Weekly singles importation rate pre-int from South Africa on 2021-11-26: 0 (0 - 0)
+Weekly singles importation rate pre-int from Africa on 2021-11-26: 0 (0 - 0)
+Weekly singles importation rate 2-weeks post-int from South Africa on 2021-12-10: 0 (0 - 0)
+Weekly singles importation rate 2-weeks post-int from Africa on 2021-12-10: 0 (0 - 0)
+Fold decrease singles rate pre-int to 2-weeks after int from South Africa: NaN (NaN - NaN)
+Fold decrease singles rate pre-int to 2-weeks after int from Africa: NaN (NaN - NaN)
+Fold decrease singles rate pre-int to 4-weeks after int from South Africa: NaN (NaN - NaN)
+Fold decrease singles rate pre-int to 4-weeks after int from Africa: NaN (NaN - NaN)

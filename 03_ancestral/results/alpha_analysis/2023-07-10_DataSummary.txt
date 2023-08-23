@@ -1,0 +1,29 @@
+variant = alpha
+focal source geography = United Kingdom
+lsd folder = ../02_trees/202208_analysis/alpha_lsd_out
+var-specific intervention = TRUE
+var-spec intervention: UK flight ban, from 2020-12-20 - 2021-01-06
+Intervention duration=17
+First Can sample: 2020-11-06
+Intervention delay = 44
+n.boots = 10
+folder.out = 2023-07-06_alpha_analysis/
+Max weekly singles importation rate from United Kingdom on 2021-01-09: 21.43 (18.84 - 24.02)
+Max weekly singles importation rate from USA on 2021-02-17: 9.05 (6.03 - 12.07)
+Max weekly singles importation rate from USA on 2021-02-18: 9.05 (6.55 - 11.54)
+Max weekly singles importation rate from USA on 2021-03-08: 9.05 (7.17 - 10.92)
+Weekly singles importation rate pre-int from United Kingdom on 2020-12-20: 17.05 (10.79 - 23.31)
+Weekly singles importation rate 2-weeks post-int from United Kingdom on 2021-01-03: 16.9 (12.25 - 21.56)
+Fold decrease singles rate pre-int to 2-weeks after int from United Kingdom: 1.57 (1.02 - 2.12)
+Fold decrease singles rate pre-int to 4-weeks after int from United Kingdom: 1.2 (0.86 - 1.54)
+Mean (95% CI) # of UK-origin variant singletons = 199 (182 - 216)
+Mean (95%CI) # of singles pre-intervention = 88 (82 - 95)
+Mean (95%CI) # of singles pre-intervention from focal = 39 (35 - 43)
+Proportion of singles pre-intervention from focal = 0.44 (0.42 - 0.47)
+Mean (95%CI) # of singles during intervention = 60 (49 - 71)
+Mean (95%CI) # of singles during intervention from focal = 30 (21 - 39)
+Proportion of singles during-intervention from focal = 0.49 (0.43 - 0.56)
+Mean (95%CI) # of singles after intervention = 290 (268 - 312)
+Mean (95%CI) # of singles after intervention = 129 (112 - 147)
+Proportion of singles post-intervention from focal = 0.44 (0.41 - 0.48)
+Fold reduction in proportion of singles pre vs during-intervention from focal = 0.93 (0.77 - 1.1)
