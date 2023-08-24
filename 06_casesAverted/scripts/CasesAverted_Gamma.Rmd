@@ -1,0 +1,1967 @@
+---
+title: "Cases Averted"
+author: "Angela"
+date: '2023-05-24'
+output: html_document
+---
+
+# Setup
+```{r include=FALSE}
+library(tidyverse)
+library(RColorBrewer)
+library(ggimage)
+library(phytools)
+library(phangorn)
+library(forcats)
+library(lubridate)
+library(gridExtra)
+library(cowplot)
+library(MASS)
+library(gtools)
+library(treeio)
+library(magick)
+library(zoo)
+library(fitdistrplus)
+
+```
+
+## Set inputs 
+```{r}
+#Modifiable inputs
+focal.var<-"gamma"
+Focal.var<-str_to_title(focal.var) 
+ft_in<-paste0("../03_ancestral/202208_ace_out/",focal.var,"_ace_out")
+focal.source<-"Brazil"
+focal.source.brf<-"Brazil"
+int.yn<-TRUE
+
+#intervention 1
+int.start.one<-as.Date("2021-01-15")
+int.end.one<-as.Date("2021-02-22")
+int.duration.one<-as.numeric(int.end.one-int.start.one)
+int.descrip.one<-"Brazil enhanced screening"
+
+#intervention 2
+int.start<-as.Date("2021-03-30")
+int.end<-as.Date("2021-04-14")
+int.duration<-as.numeric(int.end-int.start)
+int.descrip<-"Brazil enhanced screening"
+
+#for figures
+fig.start.date<-as.Date("2020-11-01")
+fig.end.date<-as.Date("2021-10-01")
+
+#sublineages over time summarized across boots
+sum.par.in<-paste0("../03_ancestral/2023-07-06_",focal.var,"_analysis/sum.par.roll.summary.csv")
+sing.par.in<-paste0("../03_ancestral/2023-07-06_",focal.var,"_analysis/sing.par.roll.summary.csv")
+
+#geo colors and lookup (merged to conts for small contribs)
+global.colors.in<-"../01_subSample/colors_out/global.colors.tsv"
+lookup.geo.in<-"../01_subSample/colors_out/lookup.geo.csv"
+
+#variant colors
+variant.colors.in<-"../01_subSample/CleanMeta_PreSubsamp/variant_colors.tsv"
+
+#updated these
+variant.df.in.glob<-paste0("../01_subSample/archive/Results_PreSubsamp_omi/variant.firstglobdate.csv")
+variant.df.in<-paste0("../01_subSample/archive/Results_PreSubsamp_omi/variant.df.can.csv")
+
+#individual boots together
+sum.in<-list.files(ft_in,pattern=".sublin.firstCanDate.csv",full.names = T)  %>% mixedsort()
+sing.in<-list.files(ft_in,pattern="_singletons.csv",full.names = T) %>% mixedsort()
+
+
+# focal variant cases in
+meta.glob.var.country.in<-"../01_subSample/Results_PreSubsamp_omi_2023/meta.glob.var.country.daily.full3.csv"
+meta.can.var.country.in<-"../01_subSample/Results_PreSubsamp_omi_2023/meta.can.var.daily.full3.csv"
+
+# travel data in
+trav.in<-paste0("../07_StatCan_TravelData/Results_202305/ExpectedTravelVolume_Final_202305/trav.",
+                tolower(focal.source.brf),".obs-exp.csv")
+
+# study period
+data.date<-"2022-03-22" 
+start.date<-"2020-11-01"
+
+#boots  to operate over
+n.B<-length(sum.in)
+BOOTS<-1:n.B
+print(paste("There are ",n.B," boots",sep=""))
+
+# folder for exports
+today<-Sys.Date()
+f.out<-paste0(today,"_",focal.var,"_analysis/") 
+if(!dir.exists(f.out)){dir.create(f.out)}
+
+# EXPORT a textfile of inputs, summaries, and data queries
+text.out<-paste0(f.out,today,"_",focal.var,"_DataSummary.txt")
+cat(paste0("variant = ",focal.var),
+    paste0("focal source geography = ",focal.source),
+    paste0("var-specific intervention = ",int.yn),
+    file=text.out,sep="\n",append=F)
+
+if(int.yn==T){
+  cat(paste0("var-spec intervention 1: ",int.descrip.one, ", from ",int.start.one," - ", int.end.one),
+  paste0("Intervention duration=",int.duration.one),
+  
+  paste0("var-spec intervention 2: ",int.descrip, ", from ",int.start," - ", int.end),
+  paste0("Intervention duration=",int.duration),
+  ## NEW:###
+  paste0("Period 1: ",per1[1]," - ", per1[2], "; duration: ",int.duration.per1),
+  paste0("Period 2: ",per2[1]," - ", per2[2], "; duration: ",int.duration.per2),
+  file=text.out,sep="\n",append=T)
+}
+
+
+#add to summary file
+cat(paste0("n.boots = ",n.B),
+    paste0("folder.out = ",f.out),file=text.out,sep="\n",append=TRUE)
+
+```
+
+## read in color for Global and lineage groups
+```{r}
+#import a tsv of name and hex color for LOCATIONS
+globalPalette<-read.table(global.colors.in)
+
+## make color scheme
+glob.colz<-row.names(globalPalette) #NOTE THIS DIDN"T WORK
+globalPalette.ch<-as.character(globalPalette$globalPalette)
+names(globalPalette.ch)<-glob.colz
+
+GlobColScale<-scale_colour_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+GlobFillScale<-scale_fill_manual(name = "Location",values = globalPalette.ch,na.value="grey60")
+
+CountryColScale<-scale_colour_manual(name = "Global region",
+                                     values = globalPalette.ch[15:length( globalPalette.ch)],
+                                     na.value="grey60")
+CountryFillScale<-scale_fill_manual(name = "Global region",
+                                    values = globalPalette.ch[15:length( globalPalette.ch)]
+                                    ,na.value="grey60")
+
+#read in lookup table to reduce cateogires to apply this color scheme (if haven't run MakeGlobalColors_boots.Rmd in this project already)
+lookup.geo<-read.csv(lookup.geo.in)
+
+## read in the variant df to use for inputs
+var.df<-read.csv(variant.df.in)
+
+#take the first canada data from this instead (complete for delta)
+var.df.glob<-read.csv(variant.df.in.glob)
+var.df.glob<-var.df.glob[,c("var.WHO","first.can.date")]
+colnames(var.df.glob)<-c("var.WHO","first.can.date.new")
+var.df<-left_join(var.df,var.df.glob,by="var.WHO")
+var.df$first.can.date<-var.df$first.can.date.new #replaced!
+
+var.df<-var.df[with(var.df, order(var.df$first.can.date, decreasing = F)),]
+
+# use the first canadian sample date for variant to pull the delay in intervention from first canadian sample to int start
+if(int.yn==T){
+  firstsamp<-var.df$first.can.date[which(var.df$var.WHO %in% Focal.var)]
+  cat(paste0("First Can sample: ", as.Date(firstsamp) ),
+      paste0("Intervention delay = ", (int.start - as.Date(firstsamp)) ),
+      file=text.out,sep="\n",append=T)
+}
+
+var.ord<-var.df$var.WHO
+var.ord<-var.ord[-which(var.ord %in% c("Theta","Lambda","GH/490R"))]
+
+varPalette<-read.table(variant.colors.in,sep="\t")
+
+#varaint specific colors
+focal.col<-rownames(varPalette)[which(tolower(varPalette$vars.ch)==Focal.var)]
+focal.pango<-var.df$var.lin[var.df$var.WHO==Focal.var]
+focal.pango<-str_replace_all(focal.pango,"\\+","\\|")
+focal.pango<-str_replace_all(focal.pango,"\\*","")
+
+## make color scheme
+var.colz<-as.character(varPalette$vars.ch)
+varPalette.ch<-row.names(varPalette)
+names(varPalette.ch)<-var.colz
+
+VOCColScale<-scale_colour_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+VOCFillScale<-scale_fill_manual(name = "Variant",values = varPalette.ch,na.value=NULL)
+
+VOCFillScale2<-scale_fill_manual(name = "Variant",values = varPalette.ch[match(var.ord,names(varPalette.ch))],na.value="grey60")
+VOCColScale2<-scale_colour_manual(name = "Variant",values = varPalette.ch[match(var.ord,names(varPalette.ch))],na.value="grey60")
+
+var.col<-varPalette.ch[which(names(varPalette.ch)==Focal.var)]
+```
+
+## Figure publication themes
+```{r}
+
+pubTheme<-theme(panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                panel.background=element_rect("grey95"), 
+                axis.line = element_line(colour = "black"),
+                legend.key.size = unit(0.5,"line"),
+                text=element_text(size=10,face="bold"),
+                legend.text=element_text(size=7))
+
+pubThemeDate<-theme(panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(),
+                    panel.background=element_rect("grey95"), 
+                    axis.line = element_line(colour = "black"),
+                    text=element_text(size=10,face="bold"),
+                    legend.key.size = unit(0.4,"line"),
+                    legend.text=element_text(size=7),
+                    axis.text.x=element_text(angle = 45,hjust=1,size=rel(1)))
+
+
+scaleDate<-scale_x_date(date_breaks = "1 month", date_minor_breaks = "2 weeks", date_labels = "%b %Y",limits=as.Date(c(start.date,"2022-03-22")),expand=c(0,0))
+
+xdates<-ymd(c("2020-12-01","2021-03-01","2021-06-01","2021-09-01","2021-12-01","2022-03-01"))
+scaleDateBusy<-scale_x_date(date_breaks="1 month", date_labels = "%b %Y",
+                            limits=as.Date(c(start.date,"2022-03-22")),
+                            expand=c(0,0))
+
+scaleDateFlex<-scale_x_date(date_labels = "%b %Y",expand=c(0,0))
+scaleDateFlexLess<-scale_x_date(date_labels = "%b %Y",expand=c(0,0),
+                                limits=c(fig.start.date,fig.end.date))
+scaleDateFlexLesser<-scale_x_date(date_labels = "%b %Y",expand=c(0,0),
+                                limits=c(fig.start.date,fig.end.date-60))
+scaleDateFlexMore<-scale_x_date(date_labels = "%b %Y",expand=c(0,0),
+                                limits=c(fig.start.date,fig.end.date+30))
+
+scaleMonthChar<-scale_x_discrete(breaks=c("2020-12","2021-03","2021-06","2021-09","2021-12","2022-03"),labels=c("Dec 2020","Mar 2021","Jun 2021","Sep 2021","Dec 2021","Mar 2022"))
+```
+
+# Sublineages averted
+
+## Estimate variant cases in focal country 
+```{r}
+## read in this data
+meta.glob.var.country.daily.full3<-read.csv(meta.glob.var.country.in)
+# head(meta.glob.var.country.daily.full3)
+focal.var.cases<- meta.glob.var.country.daily.full3 %>% 
+  filter(country%in%focal.source) %>%
+  filter(var.WHO==Focal.var)
+focal.var.cases$date<-as.Date(focal.var.cases$date)
+
+#estimated total cases
+sum(focal.var.cases$avgVOC_cases)# 10096920
+range(focal.var.cases$date) #"2019-12-30" "2022-03-17"
+
+## Plot focal cases with overlay for flight ban
+y.lim2<-c(0,(ceiling(max(focal.var.cases$avgVOC_cases))+10000))
+p.focal.var.cases<-ggplot(focal.var.cases)+
+   annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80")+
+   annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80")+
+    annotate(geom="text",x =( as.Date(int.start.one)+(int.end-int.start.one)/2),
+             y=(y.lim2[2]/100)*99, vjust=1, hjust=0.5,
+             label=int.descrip,fontface="italic",color="grey25",size=3)+
+  geom_density(aes(x=date, y=avgVOC_cases,color=country),stat="identity",width=1)+
+  pubThemeDate+
+scale_x_date(date_breaks = "1 month", date_labels = "%b %Y",
+                            limits=c(fig.start.date, fig.end.date),
+                            expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=NULL, y=paste0("Daily ave. ",Focal.var," cases in ", focal.source))
+  
+p.focal.var.cases
+ggsave(paste0(f.out,"p.focal.var.cases.png"),height=3,width=4,unit="in")
+```
+
+## Setup once for two restric periods
+```{r}
+sum.boots<-replicate(vector,n=n.B) 
+sum.boots[[1]]<-read.csv(sum.in[1])
+
+k=1 
+
+sum.Par.Roll.summary<-read.csv(sum.par.in)
+sum.Par.Roll.summary$tmrca.dt<-as.Date(sum.Par.Roll.summary$tmrca.dt)
+
+```
+
+
+## Sublin import rate 
+```{r}
+#full time period
+sum.Par.Roll.focal<-sum.Par.Roll.summary %>% 
+  filter(Parent.Location%in%focal.source) 
+
+## join the focal cases to the uk importation rate pre intervention
+sum.Par.Roll.focal$date<-sum.Par.Roll.focal$tmrca.dt
+# class(focal.var.cases$tmrca.dt)
+focal.cases.intros<-left_join(sum.Par.Roll.focal, focal.var.cases, by="date")
+
+#PLOT sublineages over time
+y.lim2<-c(0,3)
+p.sublin<-ggplot(focal.cases.intros)+
+    annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80",alpha=0.9)+
+    annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim2[1], ymax =y.lim2[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x =( as.Date(int.start.one)+int.duration.one/2),
+           y=y.lim2[2], vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  geom_line(aes(x=date, y=intros_meansum7d.mean,color=country),stat="identity",width=1)+
+  geom_ribbon(aes(x=date,ymin = lower.CI,ymax = upper.CI,fill=country),alpha=0.4)+
+  pubThemeDate+
+  scale_x_date(date_breaks="1 month", date_labels = "%b %Y",
+                            limits=c(fig.start.date, fig.end.date),
+                            expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  GlobColScale+
+  GlobFillScale+
+  theme(legend.position = "none")+
+  labs(x=NULL, y=paste0(Focal.var, " sublin./wk. from ",focal.source))
+  
+p.sublin
+ggsave(paste0(f.out,"p.sublin.overtime.png"),height=3,width=3,unit="in")
+```
+
+
+## Travel data
+```{r}
+## Read in the expected and observed travel per day from stats can analysis
+trav.vol<-read.csv(trav.in)
+
+trav.vol.red<-trav.vol[,which(colnames(trav.vol) 
+                                          %in% c("REF_DATE", "Observed",
+                                                 "Expected..no.ban.",
+                                                 "Observed..smooth..ban."))]
+colnames(trav.vol.red)<-c("tmrca.dt","Observed travel","Expected travel","Observed travel.smooth")
+trav.vol.red$tmrca.dt<-as.Date(trav.vol.red$tmrca.dt)
+
+#now join this travel data onto
+focal.cases.intros.trav<-left_join(focal.cases.intros,trav.vol.red,by="tmrca.dt")
+
+## make a mutated variable of travellers averted
+focal.cases.intros.trav <-focal.cases.intros.trav %>% mutate("trav.averted"=`Expected travel` - `Observed travel`)
+
+y.lim2<-c(0,20)
+p.var.travel<-ggplot(focal.cases.intros.trav)+
+    annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x =( as.Date(int.start)+int.duration/2),
+           y=y.lim2[2], vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  geom_line(aes(x=date, y=`Observed travel`,color=country),stat="identity",width=1)+
+  pubThemeDate+
+  scale_y_continuous(expand=c(0,0))+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=NULL, y=paste0("Travellers per day from ",focal.source))+
+  scaleDateFlexLesser+
+  coord_cartesian(y=y.lim2)
+  
+p.var.travel
+ggsave(paste0(f.out,"p.observedtravel.png"),height=3,width=3,unit="in")
+
+### NEW###
+y.lim2<-c(0,25)
+p.var.averttravel<-ggplot(focal.cases.intros.trav)+
+    annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x =( as.Date(int.start)+int.duration/2),
+           y=y.lim2[2], vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+      annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim2[1], ymax =y.lim2[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x =( as.Date(int.start.one)+int.duration.one/2),
+           y=y.lim2[2], vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  
+  geom_line(aes(x=date, y=`trav.averted`,color=country),stat="identity",width=1)+
+  pubThemeDate+
+  scale_x_date(date_breaks="1 month", date_labels = "%b %Y",
+                            limits=c(int.start-30, int.end+30),
+                            expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=NULL, y=paste0("Travellers averted per day from ",focal.source.brf))+
+  coord_cartesian(y=y.lim2)
+  
+p.var.averttravel
+ggsave(paste0(f.out,"p.avertedtravel.png"),height=3,width=3,unit="in")
+
+
+### CALCULATE TOTAL travellers averted during intervention, period 1, period 2
+focal.cases.intros.trav.per1<-focal.cases.intros.trav %>% filter (date >= per1[1] & date <=per1[2])
+trav.averted.per1<-round(sum(focal.cases.intros.trav.per1$trav.averted), digits=0)
+trav.averted.per1.day<-round(trav.averted.per1/int.duration.per1, digits=1)
+
+focal.cases.intros.trav.per2<-focal.cases.intros.trav %>% filter (date >= per2[1] & date <=per2[2])
+trav.averted.per2<-round(sum(focal.cases.intros.trav.per2$trav.averted), digits=0)
+trav.averted.per2.day<-round(trav.averted.per2/int.duration.per2, digits=1)
+
+#GAMMA HACK: sum them
+trav.averted.interv<-trav.averted.per1 + trav.averted.per2
+trav.averted.interv.day<-trav.averted.interv /(int.duration.per1 + int.duration.per1)
+
+
+#EXPORT
+cat(paste0("Travellers averted overall: ", trav.averted.interv),
+    paste0("Travellers averted overall per day: ", trav.averted.interv.day),
+    paste0("Travellers averted per 1: ", trav.averted.per1),
+    paste0("Travellers averted per 1  per day: ", trav.averted.per1.day),
+    paste0("Travellers averted per 2: ", trav.averted.per2),
+    paste0("Travellers averted per 2  per day: ", trav.averted.per2.day),
+    file=text.out, sep="\n", append=T)
+
+
+#obserevd and expected trael in  one plot
+focal.cases.intros.trav.long<-focal.cases.intros.trav %>% pivot_longer(cols = 20:21, 
+                                                                       values_to = "Travel volume",
+                                                                       names_to = "Calculation")
+#expected observerd cols, where observed is the variant color and expected is in dark grey
+exp.obs.cols<-c(var.col,"black")
+names(exp.obs.cols)<-c("Observed travel","Expected travel")
+
+y.lim2<-c(0,60)
+p.var.travel2<-ggplot(focal.cases.intros.trav.long)+
+   annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim2[1], ymax =y.lim2[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x =( as.Date(int.start.one)+int.duration.one/2),
+           y=y.lim2[2], vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  geom_line(aes(x=date, y=`Travel volume`,color=Calculation),stat="identity",width=1)+
+  pubThemeDate+
+  scale_x_date(date_breaks="1 month", date_labels = "%b %Y",
+                            limits=c(fig.start.date, fig.end.date),
+                            expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  scale_color_manual(values=exp.obs.cols)+  
+  theme(legend.position = c(0.5,0.7), 
+        legend.justification = c(0,0.5))+
+  labs(x=NULL, y=paste0("Travellers per day from ",focal.source))+
+  coord_cartesian(y=y.lim2)
+  
+p.var.travel2
+ggsave(paste0(f.out,"p.observed-expected-travel.png"),height=3,width=3,unit="in")
+
+
+#make grob of all 
+plot_grid(p.focal.var.cases, p.var.travel2, p.sublin, labels=LETTERS[1:3], nrow=1)
+ggsave(paste0(f.out, "varcases-travel-sublin-time.png"), height=4,width=9,units="in")
+```
+
+
+# For first restriction period
+## Size distributions for different periods / filters
+```{r}
+#Bin sublineage size by frequency
+sum.boots.binSize.pre<-sum.boots[[k]] %>% 
+  filter(tmrca.dt<=int.end.one) %>%
+  # filter(Parent.Location%in%focal.source) %>%
+  group_by(N.Desc.glob,Lineage) %>% 
+  dplyr::summarize(.groups="rowwise",n=n())
+
+## Smooth curves of sublineage size 
+## generate smooth density curves for sublineage size before end of restrictions
+P3.smooth<-ggplot()+
+  geom_density(data=sum.boots.binSize.pre,aes(x=N.Desc.glob),color="black",adjust = 10)+
+  pubTheme+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x=element_text(angle=45,vjust=1,hjust=1,size=rel(1.2)),
+        # legend.position = c(0.7,0.8),
+        legend.position = "none",
+        legend.text = element_text(size=9),
+        # axis.title.y=element_text(vjust=4),       
+        axis.title.y=element_text(vjust=1,size=rel(1.2)), 
+        plot.margin=unit(c(4,4,4,4),"pt"))+
+  labs(x="Sublineage size",y="Density")+
+  guides(fill=guide_legend(ncol= 1,title="Lineage",title.position="top",reverse = T, keywidth = 1.2,keyheight = 1.2))
+  # scale_y_continuous(limits=c(0,71),expand=c(0.02,0))
+
+P3.smooth
+ggsave(paste(f.out,"/Sublineagesizes.Smooth.Frequencies.untilend.restric1.png",sep=""),width=3,height=3,units="in")
+
+```
+
+## build models of observed sublin over time (Y) vs variant cases in focal var (X), adjusted for travel vol
+```{r}
+#subset to pre intervention
+focal.cases.intros.trav.pre<-focal.cases.intros.trav %>%
+  filter(date < int.start.one)
+
+#remove instances of zero
+rem<-which(focal.cases.intros.trav.pre$avgVOC_cases==0)
+if(length(rem)>0){
+  focal.cases.intros.trav.pre<-focal.cases.intros.trav.pre[-rem,]
+}
+
+#subset the data to when cases are >5000 
+subset<-5000
+cat(paste0("Models trained on data subsetted to cases > ",subset),
+    file=text.out,sep="\n",append=T)
+focal.cases.intros.trav.pre.res<-focal.cases.intros.trav.pre %>% filter(avgVOC_cases>subset)
+
+
+#correlations with travel
+cor.trav<-cor(focal.cases.intros.trav.pre$`Observed travel`, focal.cases.intros.trav.pre$intros_meansum7d.mean) %>% round(digits=2)
+cor.trav.res<-cor(focal.cases.intros.trav.pre.res$`Observed travel`, focal.cases.intros.trav.pre.res$intros_meansum7d.mean) %>% round(digits=2)
+cor.trav; cor.trav.res
+#correlations with cases, full and restricted
+cor.full<-cor(focal.cases.intros.trav.pre$avgVOC_cases, focal.cases.intros.trav.pre$intros_meansum7d.mean) %>% round(digits=2)
+cor.res<-cor(focal.cases.intros.trav.pre.res$avgVOC_cases, focal.cases.intros.trav.pre.res$intros_meansum7d.mean) %>% round(digits=2)
+cor.full;cor.res
+
+cat(paste0("Pearson's corr for cases vs sublin, full data: ",cor.full),
+    paste0("Pearson's corr for cases vs sublin, subsetted data: ",cor.res),
+    paste0("Pearson's corr for travel vs sublin, full data: ",cor.trav),
+    paste0("Pearson's corr for travel vs sublin, subsetted data: ",cor.trav.res),
+    file=text.out,sep="\n",append=T)
+
+
+## LINEAR MODELS
+#change to restricted (local) data
+lm.cases.intros<-lm(data=focal.cases.intros.trav.pre.res, intros_meansum7d.mean ~ (avgVOC_cases))
+sum.lm.cases.intros<-summary(lm.cases.intros) #Adjusted R-squared:  0.9531 ,  p-value: < 2.2e-16
+#note adjusted R-sq is better for the linear avgVOC_cases than log()
+sum.lm.cases.intros
+adjustedr2<-round(sum.lm.cases.intros$r.squared,digits = 3)
+text.adjustedr2<-paste0("Adj. R-squared = ",adjustedr2)
+cat(paste0("Model subsetted data, sublin vs cases, ",text.adjustedr2),
+    file=text.out,sep="\n",append=T)
+
+#duplicate objects to use below
+focal.cases.intros.trav.pre.res1<-focal.cases.intros.trav.pre
+focal.cases.intros.trav.pre.res.res1<-focal.cases.intros.trav.pre.res
+text.adjustedr2.res1<-text.adjustedr2
+
+#Plot Relationship b/w cases and intros
+p.focal.cases.intros.res1<-ggplot(focal.cases.intros.trav.pre.res1,
+                             aes(x=(avgVOC_cases),
+                                 y=intros_meansum7d.mean,color=country))+
+  geom_point()+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var," sublin./wk. from ",focal.source))+
+  geom_smooth(data=focal.cases.intros.trav.pre.res, method ="lm",se=T,level=0.95)+
+  pubTheme+
+  annotate(geom="label",
+           x=1,y=max(focal.cases.intros$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2.res1,hjust=0)
+
+p.focal.cases.intros.res1
+ggsave(paste0(f.out,"p.lm.focalvarcases.intros.res1.png"),height=3,width=3,unit="in")
+
+#how well do sublineages per week fit to travel vol
+lm.cases.intros.trav<-lm(data=focal.cases.intros.trav.pre.res.res1, 
+                         intros_meansum7d.mean ~(avgVOC_cases) + (`Observed travel`))
+sum.lm.cases.intros.trav<-summary(lm.cases.intros.trav) #all coef are signif and R2 0.8548
+sum.lm.cases.intros.trav
+adjustedr2.trav<-round(sum.lm.cases.intros.trav$r.squared,digits = 3)
+text.adjustedr2.trav<-paste0("Adj. R-squared = ",adjustedr2.trav)
+cat(paste0("Model subsetted data, sublin vs cases adjusted trav, ",text.adjustedr2.trav),
+    file=text.out,sep="\n",append=T)
+
+a<-anova(lm.cases.intros.trav, lm.cases.intros,test="LRT")
+p.lrt<-a$`Pr(>Chi)`;p.lrt
+cat(paste0("LRT comparing travel adjuster, ", p.lrt),
+    file=text.out,sep="\n",append=T)
+
+#does not supports the addition of travel volume as a predictor
+
+```
+
+## predict number of sublins per week up until int.end
+```{r}
+# focal.var.cases.trav<-left_join(focal.var.cases, trav.vol.red, by="date")
+# class(trav.vol.red$date)
+#dataframe subset to during the intervetnion
+focal.cases.new<-focal.cases.intros.trav%>% filter(date<=int.end.one & date>=int.start.one) 
+focal.var.cases.trav.dur<-focal.cases.new[,c("avgVOC_cases","Expected travel")] %>% as.data.frame()
+# head(focal.var.cases.trav.dur)
+#change the colname back to observed so the model can use it to predict, 
+#but these travel volumes are not observed, they are expected in the absence of ban
+colnames(focal.var.cases.trav.dur)<-c("avgVOC_cases","Observed travel")
+
+# focal.var.cases.trav.dur$avgVOC_cases<-log(focal.var.cases.trav.dur$avgVOC_cases) #this is done
+
+#now using both travel and variant cases to predict 
+final.model<-lm.cases.intros
+new.vals<-predict.lm(final.model, newdata = focal.var.cases.trav.dur,interval = "prediction")
+
+#join new vals on with the new cases data
+focal.var.cases.trav.dur2<-focal.var.cases.trav.dur %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur2)[3:5]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur2$country<-focal.source
+
+#plot this to see how many sublins there might have been during the ban
+p.obs.fit<-ggplot(focal.var.cases.trav.dur2,
+       aes(x=`Observed travel`,y=intros_meansum7d.mean,group=country)) +
+    geom_ribbon(aes(ymin = lower,ymax = upper,fill=country),alpha=0.3)+
+  geom_point(aes(color=country))+
+  GlobColScale+
+  GlobFillScale+
+  theme(legend.position = "none")+
+  labs(x="Average daily travel volume",
+         # paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var, " sublin./wk. from ",focal.source))
+
+p.obs.fit
+
+## Join this onto the other dataset, and distinguish them as 'no restriction' (predicted) and 'restrictions' (observed)
+focal.cases.intros2<-focal.cases.intros.trav.pre.res[,c("avgVOC_cases","intros_meansum7d.mean","Observed travel","country")]
+focal.cases.intros2$type<-"Observed"
+
+## Also need to add confidence intervals to the observed data that was fitted
+focal.cases.intros2.new<-predict.lm(final.model, newdata = focal.cases.intros2,interval = "confidence")
+#only want the upper and lower here
+focal.cases.intros2.new<-focal.cases.intros2.new[,c(2,3)]
+colnames(focal.cases.intros2.new)<-c("lower","upper")
+focal.cases.intros3<-focal.cases.intros2 %>% bind_cols(focal.cases.intros2.new)
+
+#join new vals on with the new cases data
+focal.var.cases.trav.dur2<-focal.var.cases.trav.dur %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur2)[3:5]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur2$country<-focal.source
+focal.var.cases.trav.dur2$type<-"Predicted"      
+focal.obs.pred<-bind_rows(focal.cases.intros3,focal.var.cases.trav.dur2)
+
+## colors for this
+pred.pal<-exp.obs.cols
+names(pred.pal)<-c("Observed","Predicted")
+
+## Plot and color by type
+p.focal.obs.pred<-ggplot(focal.obs.pred,
+       aes(x=avgVOC_cases,y=intros_meansum7d.mean,group=type)) +
+  # geom_ribbon(aes(ymin = lower,ymax = upper,fill=type),alpha=0.5)+
+  geom_point(aes(color=type),alpha=0.5)+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ", focal.source), 
+       y=paste0(Focal.var, " sublin./wk. from ",focal.source))+
+  pubTheme+
+  theme(legend.position = c(0.2,0.8))+
+        # axis.title.x=element_text(margin = margin(t = -30)))+
+  scale_fill_manual(values=pred.pal)+
+  scale_color_manual(values=pred.pal)+
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+ 
+    annotate(geom="label",
+           x=1000,
+           y=max(focal.obs.pred$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2,hjust=0,size=3)
+
+p.focal.obs.pred
+
+## NOTE this is not as easily interpretd now if it includes two covariates
+ggsave(paste0(f.out,"p.obs.pred.restr1.png"),height=3,width=3,unit="in")
+
+
+#get dates back in here
+focal.var.cases.trav.dur3<-focal.var.cases.trav.dur2 %>% left_join(focal.var.cases[,c("date","avgVOC_cases")],by="avgVOC_cases")
+focal.var.cases.trav.dur3$type<-"Predicted"
+# head(focal.var.cases.trav.dur3)
+
+#back this up for the combined plot
+focal.var.cases.trav.dur3.res1<-focal.var.cases.trav.dur3
+
+focal.intros.all<-sum.Par.Roll.summary %>% 
+  filter(Parent.Location%in%focal.source)
+focal.intros.all$type<-"Observed"
+focal.intros.all$date<-focal.intros.all$tmrca.dt
+
+# colnames(focal.var.cases.trav.dur3)
+focal.intros.all.red<-focal.intros.all[,]
+
+### NOW plot this on the sublins per date
+pred.pal2<-exp.obs.cols
+names(pred.pal2)<-c("Observed","Predicted")
+y.lim<-c(0,max(focal.var.cases.trav.dur3$intros_meansum7d.mean)+3)
+p.focal.pred.sublin<-focal.intros.all %>%
+  ggplot()+
+  pubThemeDate+
+  annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  
+           fill="grey80",alpha=0.9)+
+  annotate(geom="text",x = (as.Date(int.start.one)+int.duration.one/2),
+           y=y.lim[2]-0.2, vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  labs(x="Date of most recent common ancestor",y=paste0(paste0(Focal.var, " sublin./wk. from ",focal.source)))+
+  scale_x_date(date_breaks = "1 months", date_labels = "%b %Y",
+                            limits=c(fig.start.date, fig.end.date+7),
+                            expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  #observed
+   geom_density(aes(x=date,y=intros_meansum7d.mean,color=type),
+               stat="identity",size=1.2,alpha=0.7)+
+    geom_ribbon(aes(x=date,ymin=lower.CI,ymax=upper.CI,fill=type),
+               stat="identity",alpha=0.5)+
+  #predicted
+  geom_density(data=focal.var.cases.trav.dur3,aes(x=date,y=intros_meansum7d.mean,
+                                        color=type),
+               stat="identity",size=1.2,alpha=0.7)+
+  geom_ribbon(data=focal.var.cases.trav.dur3,aes(x=date,ymin=lower, ymax=upper,
+                                        fill=type), stat="identity",alpha=0.5)+
+  
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+
+theme(legend.position = c(0.9,0.4),
+        legend.justification = c(1,0),
+        legend.text=element_text(size=rel(1.1)),
+        legend.title=element_text(size=rel(1.1)))+  
+  scale_color_manual(values=pred.pal2)+
+  scale_fill_manual(values=pred.pal2)+
+  coord_cartesian(y=y.lim)
+p.focal.pred.sublin
+ggsave(paste0(f.out,"p.focal.pred.sublin.restr1.png"),height=3,width=3,unit="in")
+
+#no legend version
+p.focal.pred.sublin.noleg<-p.focal.pred.sublin+
+  theme(legend.position = "none")
+p.focal.pred.sublin.noleg
+ggsave(paste0(f.out,"p.focal.pred.sublin.restr1.no.leg.png"),height=3,width=3,unit="in")
+
+```
+
+## Calculate the difference in the area under curves for sublins
+```{r}
+#integrate stepwise daily 
+observed.df<-focal.intros.all %>% filter(date<=int.end.one & date>=int.start.one) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+id<-order(observed.df$date)
+AUC.observed.res1<-sum(diff(observed.df$date[id])*
+                  ((rollmean(observed.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+#divided by seven to convert it to per day instead of per week
+# AUC.observed #obser ved # of sublineages
+
+### Predicted:
+predicted.df<-focal.var.cases.trav.dur3 %>% filter(date<=int.end.one & date>=int.start.one) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+id<-order(predicted.df$date)
+AUC.predicted.res1<-sum(diff(predicted.df$date[id])*
+                  ((rollmean(predicted.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+AUC.predicted.res1 #observed # of sublineages
+
+#upper limit
+predicted.df.upper<-focal.var.cases.trav.dur3 %>% filter(date<=int.end.one & date>=int.start.one) %>% 
+  dplyr::select (c("date","upper"))
+id.upper<-order(predicted.df.upper$date)
+AUC.predicted.upper.res1<-sum(diff(predicted.df.upper$date[id.upper])*
+                  ((rollmean(predicted.df.upper$upper[id.upper],2))/7) ) %>% as.numeric()
+
+#lower limit
+predicted.df.lower<-focal.var.cases.trav.dur3 %>% filter(date<=int.end.one & date>=int.start.one) %>% dplyr::select (c("date","lower"))
+id.lower<-order(predicted.df.lower$date)
+AUC.predicted.lower.res1<-sum(diff(predicted.df.lower$date[id.lower])*
+                  ((rollmean(predicted.df.lower$lower[id.lower],2))/7) ) %>% as.numeric()
+
+## differences
+averted.sublin.res1<-AUC.predicted.res1 - AUC.observed.res1
+averted.sublin.day.res1<-averted.sublin.res1/as.numeric(int.end.one-int.start.one)
+
+averted.sublin.upper.res1<-AUC.predicted.upper.res1 - AUC.observed.res1
+averted.sublin.upper.day.res1<-averted.sublin.upper.res1/as.numeric(int.end.one-int.start.one)
+
+averted.sublin.lower.res1<-AUC.predicted.lower.res1 - AUC.observed.res1
+averted.sublin.lower.day.res1<-averted.sublin.lower.res1/as.numeric(int.end.one-int.start.one)
+
+#compose sentecnces for text output
+predicted.sublin.95ci.res1<-paste0("Sublin predicted res1: ", round(AUC.predicted.res1,digits=1),
+       " (",round(AUC.predicted.lower.res1,digits=1),
+       "-",round(AUC.predicted.upper.res1,digits=1),")")
+averted.sublin.95ci.res1<-paste0("Sublin averted res1: ", round(averted.sublin.res1,digits=1),
+       " (",round(averted.sublin.lower.res1,digits=1),
+       "-",round(averted.sublin.upper.res1,digits=1),")")
+averted.sublin.day.95ci.res1<-paste0("Sublin averted per day res1: ", round(averted.sublin.day.res1,digits=1),
+       " (",round(averted.sublin.lower.day.res1,digits=1),
+       "-",round(averted.sublin.upper.day.res1,digits=1),")")
+```
+
+## Add sublin averted to the data text export
+```{r}
+cat(paste0("Sublineages observed during restriction 1: ",
+           round(AUC.observed.res1,digits = 1)),
+  predicted.sublin.95ci.res1,
+   averted.sublin.95ci.res1,
+   averted.sublin.day.95ci.res1,
+   
+   file=text.out, append=T,sep="\n")
+```
+
+## Calculate cases averted: sum of sublin sizes averted
+```{r}
+ans.pre <- fitdist(as.numeric(sum.boots.binSize.pre$N.Desc.glob), 
+               distr = "gamma", method = "mme", #start=c(1,1000),
+               discrete=T)
+
+## Setup a function to loop 1000 draws of N sublineages frm gamma distrib
+draw.averted.cases<-function(N, gamma.df){
+  cases.averted.all<-vector()
+  if(N<0){N<-0} #if negative, then make it zero
+  for (i in 1:1000){
+    set.seed(i) 
+    # Draw N gamma distributed values
+    y_rgamma <- rgamma(N, 
+                     shape = gamma.df$estimate[1],
+                     rate=gamma.df$estimate[2]) 
+    y_rgamma<-ceiling(y_rgamma) #round up 
+  
+    # Plot of randomly drawn gamma density
+    tots<-sum(y_rgamma) # total cases averted
+    cases.averted.all<-c(cases.averted.all,tots)
+  }  
+  cases.averted.all.df<-cases.averted.all %>% as.data.frame()
+  colnames(cases.averted.all.df)<-"cases.averted.all"
+  return(cases.averted.all.df)
+}
+
+#run function to draw
+cases.averted.all.df.pre.res1<-draw.averted.cases(N=averted.sublin.res1,
+                                             gamma.df=ans.pre)
+
+#function
+mean.95ci.X<-function(vector, digits){
+  n<-length(vector)
+  m<-mean(vector)
+  sd<-sd(vector)
+  t<-qt(0.025,(n-1),lower.tail=F)
+  up<-m+(sd/sqrt(n)*t)
+  low<-m-(sd/sqrt(n)*t)
+  return(paste(round(m,digits=digits), " (",round(low,digits=digits)," - ",round(up,digits=digits),")",sep=""))
+}
+
+cases.averted.ci.res1<-mean.95ci.X(cases.averted.all.df.pre.res1$cases.averted.all)
+
+#plot it
+mean<-mean(cases.averted.all.df.pre.res1$cases.averted.all)  
+ymax<-0.07
+
+p.averted1.varcol<-ggplot(cases.averted.all.df.pre.res1) +
+  geom_density(aes(x=cases.averted.all,y=..count..),
+               color=var.col,fill=var.col,alpha=0.5)+   
+  labs(x=paste0(Focal.var, " cases averted"),y="Frequency")+
+  geom_vline(xintercept = mean, linetype=2)+
+  annotate(geom = "text",x =mean+100,y=ymax,
+           label=paste0("Mean cases averted (95% CI)\n= ",cases.averted.ci.res1),
+           hjust=-0.05,size=3)+
+  pubTheme
+  # theme(axis.title.x=element_text(margin = margin(t = -30))) #run for grob only
+p.averted1.varcol
+ggsave(paste0(f.out,"cases.averted.allsourcesendrestric1_varcol.png"),height=2.7,width=3,unit="in")
+
+## Repeat for lower and upper 95% ci of averted sublin
+cases.averted.lower.res1<-draw.averted.cases(N=averted.sublin.lower.res1,
+                                           gamma.df = ans.pre)
+cases.averted.lower.ci.res1<-mean.95ci.X(cases.averted.lower.res1$cases.averted.all)
+cases.averted.upper.res1<-draw.averted.cases(N=averted.sublin.upper.res1,
+                                           gamma.df = ans.pre)
+cases.averted.upper.ci.res1<-mean.95ci.X(cases.averted.upper.res1$cases.averted.all)
+
+```
+
+## Grob together the key plots from this analysis
+```{r}
+plot_grid(p.focal.var.cases, p.focal.cases.intros.res1, 
+          p.focal.pred.sublin, p.averted1.varcol, nrow=2,labels=LETTERS[1:4],
+          align="hv")
+ggsave(paste0(f.out,"composite_casesAverted_full_res1.png"),height=7,width=7,units = "in")
+
+
+#horizontal version
+plot_grid(p.focal.var.cases, p.focal.cases.intros.res1, 
+          p.focal.pred.sublin, p.averted1.varcol, nrow=1,labels=LETTERS[1:4],
+          align="hv")
+ggsave(paste0(f.out,"composite_casesAverted_full_h_res1.png"),height=3.8,width=13,units = "in")
+
+
+```
+
+## Add cases from sublin averted to the data text export
+```{r}
+cat(paste0("Mean cases (sublin desc) averted res1, all source distrib, mean: ",
+           cases.averted.ci.res1),
+      paste0("Mean cases (sublin desc) averted res1, all source,lower: ",
+           cases.averted.lower.ci.res1),
+    paste0("Mean cases (sublin desc) averted res1, all source, upper: ",
+           cases.averted.upper.ci.res1),
+    file=text.out, append=T,sep="\n")
+```
+
+# Restriction 2
+
+## Size distributions for different periods / filters
+```{r}
+#Bin sublineage size by frequency
+sum.boots.binSize.pre<-sum.boots[[k]] %>% 
+  filter(tmrca.dt<=int.end) %>%
+  # filter(Parent.Location%in%focal.source) %>%
+  group_by(N.Desc.glob,Lineage) %>% 
+  dplyr::summarize(.groups="rowwise",n=n())
+
+
+## Smooth curves of sublineage size 
+## generate smooth density curves for sublineage size before end of restrictions
+P3.smooth<-ggplot()+
+  geom_density(data=sum.boots.binSize.pre,aes(x=N.Desc.glob),color="black",adjust = 10)+
+  pubTheme+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x=element_text(angle=45,vjust=1,hjust=1,size=rel(1.2)),
+        # legend.position = c(0.7,0.8),
+        legend.position = "none",
+        legend.text = element_text(size=9),
+        # axis.title.y=element_text(vjust=4),       
+        axis.title.y=element_text(vjust=1,size=rel(1.2)), 
+        plot.margin=unit(c(4,4,4,4),"pt"))+
+  labs(x="Sublineage size",y="Density")+
+  guides(fill=guide_legend(ncol= 1,title="Lineage",title.position="top",reverse = T, keywidth = 1.2,keyheight = 1.2))
+  # scale_y_continuous(limits=c(0,71),expand=c(0.02,0))
+
+P3.smooth
+ggsave(paste(f.out,"/Sublineagesizes.Smooth.Frequencies.untilend.restric2.png",sep=""),width=3,height=3,units="in")
+
+```
+
+## build models of observed sublin over time (Y) vs variant cases in focal var (X), adjusted for travel vol
+```{r}
+#subset to pre intervention
+focal.cases.intros.trav.pre<-focal.cases.intros.trav %>%
+  filter(date < int.start)
+
+#remove instances of zero
+rem<-which(focal.cases.intros.trav.pre$avgVOC_cases==0)
+if(length(rem)>0){
+  focal.cases.intros.trav.pre<-focal.cases.intros.trav.pre[-rem,]
+}
+
+#subset the data to two weeks before restr
+focal.cases.intros.trav.pre.res<-focal.cases.intros.trav.pre %>%
+  # filter(avgVOC_cases<50000) %>%
+  filter(date>=(int.start-21) & date<=int.start)
+
+#correlations with travel
+cor.trav<-cor(focal.cases.intros.trav.pre$`Observed travel`, focal.cases.intros.trav.pre$intros_meansum7d.mean) %>% round(digits=2)
+cor.trav.res<-cor(focal.cases.intros.trav.pre.res$`Observed travel`, focal.cases.intros.trav.pre.res$intros_meansum7d.mean) %>% round(digits=2)
+cor.trav; cor.trav.res
+#correlations with cases, full and restricted
+cor.full<-cor(focal.cases.intros.trav.pre$avgVOC_cases, focal.cases.intros.trav.pre$intros_meansum7d.mean) %>% round(digits=2)
+cor.res<-cor(focal.cases.intros.trav.pre.res$avgVOC_cases, focal.cases.intros.trav.pre.res$intros_meansum7d.mean) %>% round(digits=2)
+cor.full;cor.res
+
+cat(paste0("Pearson's corr for cases vs sublin,res2, full data: ",cor.full),
+    paste0("Pearson's corr for cases vs sublin,res2, subsetted data: ",cor.res),
+    paste0("Pearson's corr for travel vs sublin,res2, full data: ",cor.trav),
+    paste0("Pearson's corr for travel vs sublin,res2, subsetted data: ",cor.trav.res),
+    file=text.out,sep="\n",append=T)
+
+## LINEAR MODELS
+#change to restricted (local) data
+lm.cases.intros<-lm(data=focal.cases.intros.trav.pre.res, intros_meansum7d.mean ~ (avgVOC_cases))
+sum.lm.cases.intros<-summary(lm.cases.intros) #Adjusted R-squared:  0.9531 ,  p-value: < 2.2e-16
+#note adjusted R-sq is better for the linear avgVOC_cases than log()
+sum.lm.cases.intros
+adjustedr2<-round(sum.lm.cases.intros$r.squared,digits = 3)
+text.adjustedr2<-paste0("Adj. R-squared = ",adjustedr2)
+cat(paste0("Model subsetted data, sublin vs cases,res2, ",text.adjustedr2),
+    file=text.out,sep="\n",append=T)
+
+focal.cases.intros.trav.pre.res.res2<-focal.cases.intros.trav.pre.res
+text.adjustedr2.res2<-text.adjustedr2
+
+#Plot Relationship b/w cases and intros
+p.focal.cases.intros<-ggplot(focal.cases.intros.trav.pre,
+                             aes(x=(avgVOC_cases),
+                                 y=intros_meansum7d.mean,color=country))+
+  geom_point(alpha=0.7)+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var," sublin./wk. from ",focal.source))+
+  geom_smooth(data=focal.cases.intros.trav.pre.res.res2, method ="lm",se=T,level=0.95)+
+  geom_smooth(data=focal.cases.intros.trav.pre.res.res1, method ="lm",se=T,level=0.95)+
+  pubTheme+
+    annotate(geom="label",
+           x=0.3,y=1.5,
+           label=text.adjustedr2.res1,hjust=0,size=2.5)+
+  annotate(geom="label",
+           x=1,y=max(focal.cases.intros$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2.res2,hjust=-1,size=2.5)
+
+p.focal.cases.intros
+ggsave(paste0(f.out,"p.lm.focalvarcases.intros.res.both.png"),height=3,width=3,unit="in")
+
+#how well do sublineages per week fit to travel vol
+lm.cases.intros.trav<-lm(data=focal.cases.intros.trav.pre.res, 
+                         intros_meansum7d.mean ~(avgVOC_cases) + (`Observed travel`))
+sum.lm.cases.intros.trav<-summary(lm.cases.intros.trav) #all coef are signif and R2 0.8548
+sum.lm.cases.intros.trav
+adjustedr2.trav<-round(sum.lm.cases.intros.trav$r.squared,digits = 3)
+text.adjustedr2.trav<-paste0("Adj. R-squared = ",adjustedr2.trav)
+
+cat(paste0("Model subsetted data, sublin vs cases adjusted trav,res2, ",text.adjustedr2.trav),
+    file=text.out,sep="\n",append=T)
+    
+# AND    
+    
+a<-anova(lm.cases.intros.trav, lm.cases.intros,test="LRT")
+p.lrt<-a$`Pr(>Chi)`;p.lrt
+cat(paste0("LRT comparing travel adjuster,res2, ", p.lrt),
+    file=text.out,sep="\n",append=T)
+
+
+
+
+```
+
+## predict number of sublins per week up until int.end
+```{r}
+# focal.var.cases.trav<-left_join(focal.var.cases, trav.vol.red, by="date")
+# class(trav.vol.red$date)
+#dataframe subset to during the intervetnion
+focal.cases.new<-focal.cases.intros.trav%>% filter(date<=int.end & date>=int.start) 
+focal.var.cases.trav.dur<-focal.cases.new[,c("avgVOC_cases","Expected travel")] %>% as.data.frame()
+# head(focal.var.cases.trav.dur)
+#change the colname back to observed so the model can use it to predict, 
+#but these travel volumes are not observed, they are expected in the absence of ban
+colnames(focal.var.cases.trav.dur)<-c("avgVOC_cases","Observed travel")
+
+# focal.var.cases.trav.dur$avgVOC_cases<-log(focal.var.cases.trav.dur$avgVOC_cases) #this is done
+
+#now using both travel and variant cases to predict 
+final.model<-lm.cases.intros
+new.vals<-predict.lm(final.model, newdata = focal.var.cases.trav.dur,interval = "prediction")
+
+#join new vals on with the new cases data
+focal.var.cases.trav.dur2<-focal.var.cases.trav.dur %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur2)[3:5]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur2$country<-focal.source
+
+#plot this to see how many sublins there might have been during the ban
+p.obs.fit<-ggplot(focal.var.cases.trav.dur2,
+       aes(x=`Observed travel`,y=intros_meansum7d.mean,group=country)) +
+    geom_ribbon(aes(ymin = lower,ymax = upper,fill=country),alpha=0.3)+
+  geom_point(aes(color=country))+
+  GlobColScale+
+  GlobFillScale+
+  theme(legend.position = "none")+
+  labs(x="Average daily travel volume",
+         # paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var, " sublin./wk. from ",focal.source))
+
+p.obs.fit
+
+## Join this onto the other dataset, and distinguish them as 'no restriction' (predicted) and 'restrictions' (observed)
+focal.cases.intros2<-focal.cases.intros.trav.pre.res[,c("avgVOC_cases","intros_meansum7d.mean","Observed travel","country")]
+focal.cases.intros2$type<-"Observed"
+
+## Also need to add confidence intervals to the observed data that was fitted
+focal.cases.intros2.new<-predict.lm(final.model, newdata = focal.cases.intros2,interval = "confidence")
+#only want the upper and lower here
+focal.cases.intros2.new<-focal.cases.intros2.new[,c(2,3)]
+colnames(focal.cases.intros2.new)<-c("lower","upper")
+focal.cases.intros3<-focal.cases.intros2 %>% bind_cols(focal.cases.intros2.new)
+
+#join new vals on with the new cases data
+focal.var.cases.trav.dur2<-focal.var.cases.trav.dur %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur2)[3:5]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur2$country<-focal.source
+focal.var.cases.trav.dur2$type<-"Predicted"      
+focal.obs.pred<-bind_rows(focal.cases.intros3,focal.var.cases.trav.dur2)
+
+## colors for this
+pred.pal<-exp.obs.cols
+names(pred.pal)<-c("Observed","Predicted")
+
+## Plot and color by type
+p.focal.obs.pred<-ggplot(focal.obs.pred,
+       aes(x=avgVOC_cases,y=intros_meansum7d.mean,group=type)) +
+  # geom_ribbon(aes(ymin = lower,ymax = upper,fill=type),alpha=0.5)+
+  geom_point(aes(color=type),alpha=0.5)+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ", focal.source), 
+       y=paste0(Focal.var, " sublin./wk. from ",focal.source))+
+  pubTheme+
+  theme(legend.position = c(0.2,0.8))+
+        # axis.title.x=element_text(margin = margin(t = -30)))+
+  scale_fill_manual(values=pred.pal)+
+  scale_color_manual(values=pred.pal)+
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+ 
+    annotate(geom="label",
+           x=1000,
+           y=max(focal.obs.pred$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2,hjust=0,size=3)
+
+p.focal.obs.pred
+
+## NOTE this is not as easily interpretd now if it includes two covariates
+ggsave(paste0(f.out,"p.obs.pred.restr2.png"),height=3,width=3,unit="in")
+
+
+#get dates back in here
+focal.var.cases.trav.dur3<-focal.var.cases.trav.dur2 %>% left_join(focal.var.cases[,c("date","avgVOC_cases")],by="avgVOC_cases")
+focal.var.cases.trav.dur3$type<-"Predicted"
+# head(focal.var.cases.trav.dur3)
+
+focal.intros.all<-sum.Par.Roll.summary %>% 
+  filter(Parent.Location%in%focal.source)
+focal.intros.all$type<-"Observed"
+focal.intros.all$date<-focal.intros.all$tmrca.dt
+
+# colnames(focal.var.cases.trav.dur3)
+focal.intros.all.red<-focal.intros.all[,]
+
+### NOW plot this on the sublins per date
+pred.pal2<-exp.obs.cols
+names(pred.pal2)<-c("Observed","Predicted")
+y.lim<-c(0,max(focal.var.cases.trav.dur3$intros_meansum7d.mean)+3)
+p.focal.pred.sublin<-focal.intros.all %>%
+  ggplot()+
+  pubThemeDate+
+     annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x =( as.Date(int.start.one)+int.duration.one/2),
+           y=y.lim[2], vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  labs(x="Date of most recent common ancestor",y=paste0(paste0(Focal.var, " sublin./wk. from ",focal.source)))+
+  scale_x_date(date_breaks = "1 months", date_labels = "%b %Y",
+                            limits=c(fig.start.date, fig.end.date-60),
+                            expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  #observed
+   geom_density(aes(x=date,y=intros_meansum7d.mean,color=type),
+               stat="identity",size=1.2,alpha=0.7)+
+    geom_ribbon(aes(x=date,ymin=lower.CI,ymax=upper.CI,fill=type),
+               stat="identity",alpha=0.5)+
+  #predicted restr 2
+  geom_density(data=focal.var.cases.trav.dur3,aes(x=date,y=intros_meansum7d.mean,
+                                        color=type),
+               stat="identity",size=1.2,alpha=0.7)+
+  geom_ribbon(data=focal.var.cases.trav.dur3,aes(x=date,ymin=lower, ymax=upper,
+                                        fill=type), stat="identity",alpha=0.5)+
+  #predicted restr 1
+    geom_density(data=focal.var.cases.trav.dur3.res1,aes(x=date,y=intros_meansum7d.mean,
+                                        color=type),
+               stat="identity",size=1.2,alpha=0.7)+
+  geom_ribbon(data=focal.var.cases.trav.dur3.res1,aes(x=date,ymin=lower, ymax=upper,
+                                        fill=type), stat="identity",alpha=0.5)+
+  #theme
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+
+theme(legend.position = c(0.95,0.6),
+        legend.justification = c(1,0),
+        legend.text=element_text(size=rel(1.1)),
+        legend.title=element_text(size=rel(1.1)))+  
+  scale_color_manual(values=pred.pal2)+
+  scale_fill_manual(values=pred.pal2)+
+  coord_cartesian(y=y.lim)
+p.focal.pred.sublin
+ggsave(paste0(f.out,"p.focal.pred.sublin.restr.both.png"),height=3,width=3,unit="in")
+
+#no legend version
+p.focal.pred.sublin.noleg<-p.focal.pred.sublin+
+  theme(legend.position = "none")
+p.focal.pred.sublin.noleg
+ggsave(paste0(f.out,"p.focal.pred.sublin.restr2.no.leg.png"),height=3,width=3,unit="in")
+
+```
+
+## Calculate the difference in the area under curves for sublins
+```{r}
+#integrate stepwise daily 
+observed.df<-focal.intros.all %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+id<-order(observed.df$date)
+AUC.observed.res2<-sum(diff(observed.df$date[id])*
+                  ((rollmean(observed.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+#divided by seven to convert it to per day instead of per week
+# AUC.observed.res2 #obser ved # of sublineages
+
+### Predicted:
+predicted.df<-focal.var.cases.trav.dur3 %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+id<-order(predicted.df$date)
+AUC.predicted.res2<-sum(diff(predicted.df$date[id])*
+                  ((rollmean(predicted.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+AUC.observed.res2 #observed # of sublineages
+
+#upper limit
+predicted.df.upper<-focal.var.cases.trav.dur3 %>% filter(date<=int.end & date>=int.start) %>% 
+  dplyr::select (c("date","upper"))
+id.upper<-order(predicted.df.upper$date)
+AUC.predicted.upper.res2<-sum(diff(predicted.df.upper$date[id.upper])*
+                  ((rollmean(predicted.df.upper$upper[id.upper],2))/7) ) %>% as.numeric()
+
+#lower limit
+predicted.df.lower<-focal.var.cases.trav.dur3 %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","lower"))
+id.lower<-order(predicted.df.lower$date)
+AUC.predicted.lower.res2<-sum(diff(predicted.df.lower$date[id.lower])*
+                  ((rollmean(predicted.df.lower$lower[id.lower],2))/7) ) %>% as.numeric()
+
+## differences
+averted.sublin.res2<-AUC.predicted.res2 - AUC.observed.res2
+averted.sublin.day.res2<-averted.sublin.res2/int.duration
+
+averted.sublin.upper.res2<-AUC.predicted.upper.res2 - AUC.observed.res2
+averted.sublin.upper.day.res2<-averted.sublin.upper.res2/int.duration
+
+averted.sublin.lower.res2<-AUC.predicted.lower.res2 - AUC.observed.res2
+averted.sublin.lower.day.res2<-averted.sublin.lower.res2/int.duration
+
+#compose sentecnces for text output
+predicted.sublin.95ci.res2<-paste0("Sublin predicted res2: ", round(AUC.predicted.res2,digits=1),
+       " (",round(AUC.predicted.lower.res2,digits=1),
+       "-",round(AUC.predicted.upper.res2,digits=1),")")
+averted.sublin.95ci.res2<-paste0("Sublin averted res2: ", round(averted.sublin.res2,digits=1),
+       " (",round(averted.sublin.lower.res2,digits=1),
+       "-",round(averted.sublin.upper.res2,digits=1),")")
+averted.sublin.day.95ci.res2<-paste0("Sublin averted per day res2: ", round(averted.sublin.day.res2,digits=1),
+       " (",round(averted.sublin.lower.day.res2,digits=1),
+       "-",round(averted.sublin.upper.day.res2,digits=1),")")
+```
+
+## Add sublin averted to the data text export
+```{r}
+cat(paste0("Sublineages observed during restriction 2: ",
+           round(AUC.observed.res2,digits = 1)),
+  predicted.sublin.95ci.res2,
+   averted.sublin.95ci.res2,
+   averted.sublin.day.95ci.res2,
+   
+   file=text.out, append=T,sep="\n")
+```
+
+
+## Grob together the key plots from this analysis
+```{r}
+plot_grid(p.focal.var.cases, p.focal.cases.intros, 
+          p.focal.pred.sublin, p.averted1.varcol, nrow=2,labels=LETTERS[1:4],
+          align="hv")
+ggsave(paste0(f.out,"composite_casesAverted_full_res-both.png"),height=7,width=7,units = "in")
+
+
+#horizontal version
+plot_grid(p.focal.var.cases, p.focal.cases.intros, 
+          p.focal.pred.sublin, p.averted1.varcol, nrow=1,labels=LETTERS[1:4],
+          align="hv")
+ggsave(paste0(f.out,"composite_casesAverted_full_res-both_h.png"),height=3.8,width=13,units = "in")
+
+
+```
+
+
+## Calculate cases averted: sum of sublin sizes averted
+```{r}
+
+#run function to draw
+cases.averted.all.df.pre.res2<-draw.averted.cases(N=averted.sublin.res2,
+                                             gamma.df=ans.pre)
+
+cases.averted.ci.res2<-mean.95ci.X(cases.averted.all.df.pre.res2$cases.averted.all)
+
+#plot it
+mean<-mean(cases.averted.all.df.pre.res2$cases.averted.all)  
+ymax<-0.07
+
+p.averted1.varcol.res2<-ggplot(cases.averted.all.df.pre.res2) +
+  geom_density(aes(x=cases.averted.all,y=..count..),
+               color=var.col,fill=var.col,alpha=0.5)+   
+  labs(x=paste0(Focal.var, " cases averted"),y="Frequency")+
+  geom_vline(xintercept = mean, linetype=2)+
+  annotate(geom = "text",x =mean+100,y=ymax,
+           label=paste0("Mean cases averted (95% CI)\n= ",cases.averted.ci.res2),
+           hjust=-0.05,size=3)+
+  pubTheme
+  # theme(axis.title.x=element_text(margin = margin(t = -30))) #run for grob only
+p.averted1.varcol.res2
+ggsave(paste0(f.out,"cases.averted.allsourcesendrestric2_varcol.png"),height=2.7,width=3,unit="in")
+
+## Repeat for lower and upper 95% ci of averted sublin
+cases.averted.lower.res2<-draw.averted.cases(N=averted.sublin.lower.res2,
+                                           gamma.df = ans.pre)
+cases.averted.lower.ci.res2<-mean.95ci.X(cases.averted.lower.res2$cases.averted.all)
+cases.averted.upper.res2<-draw.averted.cases(N=averted.sublin.upper.res2,
+                                           gamma.df = ans.pre)
+cases.averted.upper.ci.res2<-mean.95ci.X(cases.averted.upper.res2$cases.averted.all)
+
+```
+
+
+## Add cases from sublin averted to the data text export
+```{r}
+cat(paste0("Mean cases (sublin desc) averted res2, all source distrib, mean: ",
+           cases.averted.ci.res2),
+      paste0("Mean cases (sublin desc) averted res2, all source,lower: ",
+           cases.averted.lower.ci.res2),
+    paste0("Mean cases (sublin desc) averted res2, all source, upper: ",
+           cases.averted.upper.ci.res2),
+    
+    file=text.out, append=T,sep="\n")
+```
+
+# Singletons averted
+
+## Estimate singletons averted during intervention using case data
+```{r}
+sing.Par.Roll.summary<-read.csv(sing.par.in)
+sing.Par.Roll.summary$tmrca.dt.half<-as.Date(sing.Par.Roll.summary$tmrca.dt.half)
+```
+
+## restriction 1
+```{r}
+#singleton rate right before the intervention 1:
+sing.Par.Roll.focal.pre<-sing.Par.Roll.summary %>% 
+  filter(par.state%in%focal.source) %>%
+  filter(tmrca.dt.half-14 <= (int.start.one))
+
+## join the focal cases to the importation rate pre intervention
+sing.Par.Roll.focal.pre$date<-sing.Par.Roll.focal.pre$tmrca.dt.half
+# class(focal.var.cases$tmrca.dt)
+focal.cases.intros.sing<-left_join(sing.Par.Roll.focal.pre, focal.var.cases, by="date")
+# head(focal.cases.intros.sing)
+
+#subset the data
+focal.cases.intros.sing.res<-focal.cases.intros.sing %>% 
+  filter(avgVOC_cases>subset)
+
+#Make a linear model
+#use this to predict the number of singletons averted based on cases
+#RESTRICT TO LOCAL
+lm.cases.intros.sing<-lm(data=focal.cases.intros.sing.res, intros_meansum7d.mean ~ avgVOC_cases)
+sing.lm.cases.intros.sing<-summary(lm.cases.intros.sing) #Adjusted R-squared:  0.9531 ,  p-value: < 2.2e-16
+sing.lm.cases.intros.sing
+adjustedr2<-round(sing.lm.cases.intros.sing$r.squared,digits = 3)
+text.adjustedr2<-paste0("Multiple R-squared = ",adjustedr2)
+
+#duplicate for use below
+text.adjustedr2.res1<-text.adjustedr2
+focal.cases.intros.sing.res.res1<-focal.cases.intros.sing.res
+
+#Relationship b/w cases in the UK And intros into Canada
+p.sing.focal.cases.intros.sing.res1<-ggplot(focal.cases.intros.sing,
+                             aes(x=avgVOC_cases,
+                                 y=intros_meansum7d.mean,color=country))+
+  geom_point()+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var, " single./wk. from ",focal.source))+
+  geom_smooth(data=focal.cases.intros.sing.res.res1, method ="lm",se=T,level=0.95)+
+  pubTheme+
+  annotate(geom="label",
+           x=1,y=max(focal.cases.intros.sing$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2,hjust=0)
+
+p.sing.focal.cases.intros.sing.res1
+ggsave(paste0(f.out,"p.sing.focal.var.cases.intros.sing.lm.res1.png"),height=3,width=3,unit="in")
+
+#now predict number of singletons per week up until int.end.one
+focal.cases.new<-focal.var.cases %>% filter(date<=int.end.one & date>=int.start.one) 
+focal.var.cases.trav.dur.sing<-focal.cases.new$avgVOC_cases %>% as.data.frame()
+colnames(focal.var.cases.trav.dur.sing)<-"avgVOC_cases"
+new.vals<-predict.lm(lm.cases.intros.sing,newdata = focal.var.cases.trav.dur.sing,interval = "prediction")
+#join new vals on with the new cases data
+focal.var.cases.trav.dur.sing2<-focal.var.cases.trav.dur.sing %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur.sing2)[2:4]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur.sing2$country<-focal.source
+
+#plot this to see how many singletons there might have been during the ban
+p.sing.obs.fit<-ggplot(focal.var.cases.trav.dur.sing2,
+       aes(x=avgVOC_cases,y=intros_meansum7d.mean,group=country)) +
+    geom_ribbon(aes(ymin = lower,ymax = upper,fill=country),alpha=0.3)+
+  geom_point(aes(color=country))+
+  GlobColScale+
+  GlobFillScale+
+  theme(legend.position = "none")+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var, " single./wk. from ",focal.source))
+p.sing.obs.fit
+## Join this onto the other dataset, and distinguish them as 'no restriction' (predicted) and 'restrictions' (observed)
+
+focal.cases.intros.sing2<-focal.cases.intros.sing[,c("avgVOC_cases","intros_meansum7d.mean","country")]
+focal.cases.intros.sing2$type<-"Observed"
+
+## Also need to add confidence intervals to the observed data that was fitted
+focal.cases.intros.sing2.new<-predict.lm(lm.cases.intros.sing,newdata = focal.cases.intros.sing2,interval = "prediction")
+#only want the upper and lower here
+focal.cases.intros.sing2.new<-focal.cases.intros.sing2.new[,c(2,3)]
+colnames(focal.cases.intros.sing2.new)<-c("lower","upper")
+focal.cases.intros.sing3<-focal.cases.intros.sing2 %>% bind_cols(focal.cases.intros.sing2.new)
+
+#join new vals on with the new cases data
+focal.var.cases.trav.dur.sing2<-focal.var.cases.trav.dur.sing %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur.sing2)[2:4]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur.sing2$country<-focal.source
+focal.var.cases.trav.dur.sing2$type<-"Predicted"      
+focal.obs.pred<-bind_rows(focal.cases.intros.sing3,focal.var.cases.trav.dur.sing2)
+
+## colors for this
+pred.pal<-exp.obs.cols
+names(pred.pal)<-c("Observed","Predicted")
+## Plot and color by type
+p.sing.focal.obs.pred.res1<-ggplot(focal.obs.pred,
+       aes(x=avgVOC_cases,y=intros_meansum7d.mean,group=type)) +
+  geom_ribbon(aes(ymin = lower,ymax = upper,fill=type),alpha=0.5)+
+  geom_point(aes(color=type),alpha=0.8)+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), y=paste0(Focal.var, " single./wk. from ",focal.source))+
+  # geom_smooth(method ="lm",alpha=0.2,color=type)+
+  pubTheme+
+  theme(legend.position = c(0.2,0.7))+
+        # axis.title.x=element_text(margin = margin(t = -30)))+
+  scale_fill_manual(values=pred.pal)+
+  scale_color_manual(values=pred.pal)+
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+ 
+    annotate(geom="label",
+           x=min(focal.obs.pred$avgVOC_cases,na.rm=T),
+           y=max(focal.obs.pred$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2.res1,hjust=0,size=3)
+
+p.sing.focal.obs.pred.res1
+ggsave(paste0(f.out,"p.sing.obs.pred.res1.png"),height=3,width=3,unit="in")
+
+## Join the predicted values onto the data over time
+
+#get dates back in here
+focal.var.cases.trav.dur.sing3<-focal.var.cases.trav.dur.sing2 %>% left_join(focal.var.cases[,c("date","avgVOC_cases")],by="avgVOC_cases")
+focal.var.cases.trav.dur.sing3$type<-"Predicted"
+# head(focal.var.cases.trav.dur.sing3)
+
+focal.intros.sing.all<-sing.Par.Roll.summary %>% 
+  filter(par.state%in%focal.source)
+focal.intros.sing.all$type<-"Observed"
+focal.intros.sing.all$date<-focal.intros.sing.all$tmrca.dt
+# colnames(focal.var.cases.trav.dur.sing3)
+
+#duplicate for use below
+focal.var.cases.trav.dur.sing3.res1<-focal.var.cases.trav.dur.sing3
+
+### NOW plot this on the singletons per date
+pred.pal2<-pred.pal
+names(pred.pal2)<-c("Observed","Predicted")
+y.lim<-c(0,max(focal.var.cases.trav.dur.sing3$intros_meansum7d.mean)+3)
+
+p.sing.focal.pred.singleton.res1<-focal.intros.sing.all %>%
+  ggplot()+
+  pubThemeDate+
+  annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+    annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x = (as.Date(int.start.one)+int.duration/2),y=y.lim[2]-0.2, vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  labs(x="Date of most recent common ancestor",y=paste0(paste0(Focal.var, " single./wk. from ",focal.source)))+
+  scaleDateFlexLess+
+  scale_y_continuous(expand=c(0,0))+
+  #observed
+   geom_line(aes(x=date,y=intros_meansum7d.mean,color=type),
+               stat="identity",size=1.5,alpha=0.7)+
+      geom_ribbon(aes(x=date,ymin=lower.CI,ymax=upper.CI,fill=type),
+               stat="identity",alpha=0.5)+
+  #predicted
+  geom_line(data=focal.var.cases.trav.dur.sing3.res1,aes(x=date,
+                                                    y=intros_meansum7d.mean,
+                                                    color=type),
+               stat="identity",size=1.5,alpha=0.7)+
+  
+  geom_ribbon(data=focal.var.cases.trav.dur.sing3.res1,aes(x=date,ymin=lower, ymax=upper,
+                                        fill=type), stat="identity",alpha=0.5)+
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+
+  theme(legend.position = c(0.6,0.8))+
+  scale_color_manual(values=pred.pal2)+
+  scale_fill_manual(values=pred.pal2)+
+  coord_cartesian(y=y.lim)
+p.sing.focal.pred.singleton.res1
+ggsave(paste0(f.out,"p.sing.focal.pred.singleton.res1.png"),height=3.5,width=3.5,unit="in")
+
+```
+
+## Calculate the difference in the area under curves
+```{r}
+#integrate stepwise daily 
+observed.df<-focal.intros.sing.all %>% filter(date<=int.end.one & date>=int.start.one) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+observed.df<-observed.df %>%filter (!is.na(intros_meansum7d.mean))
+id<-order(observed.df$date)
+AUC.observed.sing.res1<-sum(diff(observed.df$date[id])*
+                  ((rollmean(observed.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+#divided by seven to convert it to per day instead of per week
+
+### Predicted:
+predicted.df<-focal.var.cases.trav.dur.sing3 %>% filter(date<=int.end & date>=int.start.one) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+id<-order(predicted.df$date)
+AUC.predicted.sing.res1<-sum(diff(predicted.df$date[id])*
+                  ((rollmean(predicted.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+
+#upper limit
+predicted.df.upper<-focal.var.cases.trav.dur.sing3 %>% filter(date<=int.end.one & date>=int.start.one) %>% dplyr::select (c("date","upper"))
+id.upper<-order(predicted.df$date)
+AUC.predicted.sing.upper.res1<-sum(diff(predicted.df.upper$date[id.upper])*
+                  ((rollmean(predicted.df.upper$upper[id.upper],2))/7) ) %>% as.numeric()
+
+#lower limit
+predicted.df.lower<-focal.var.cases.trav.dur.sing3 %>% filter(date<=int.end.one & date>=int.start.one) %>% dplyr::select (c("date","lower"))
+id.lower<-order(predicted.df$date)
+AUC.predicted.sing.lower.res1<-sum(diff(predicted.df.lower$date[id.lower])*
+                  ((rollmean(predicted.df.lower$lower[id.lower],2))/7) ) %>% as.numeric()
+
+## differences
+averted.singleton.res1<-AUC.predicted.sing.res1 - AUC.observed.sing.res1
+averted.singleton.day.res1<-averted.singleton.res1/int.duration.one
+
+averted.singleton.upper.res1<-AUC.predicted.sing.upper.res1 - AUC.observed.sing.res1
+averted.singleton.upper.day.res1<-averted.singleton.upper.res1/int.duration.one
+
+averted.singleton.lower.res1<-AUC.predicted.sing.lower.res1 - AUC.observed.sing.res1
+averted.singleton.lower.day.res1<-averted.singleton.lower.res1/int.duration.one
+
+#compose sentecnces for text output
+predicted.single.95ci.res1<-paste0("singletons predicted res1: ", round(AUC.predicted.sing.res1,digits=1),
+       " (",round(AUC.predicted.sing.lower.res1,digits=1),
+       "-",round(AUC.predicted.sing.upper.res1,digits=1),")")
+
+averted.single.95ci.res1<-paste0("Singletons averted res1: ",round(averted.singleton.res1,digits=1),
+       " (",round(averted.singleton.lower.res1,digits=1),
+       "-",round(averted.singleton.upper.res1,digits=1),")")
+
+averted.single.day.95ci.res1<-paste0("Singletons averted per day res1: ", round(averted.singleton.day.res1,digits=1),
+       " (",round(averted.singleton.lower.day.res1,digits=1),
+       "-",round(averted.singleton.upper.day.res1,digits=1),")")
+```
+
+## Add to text export
+```{r}
+#TOTAL and 95 CI averted   
+tots.averted.res1<-round(mean(cases.averted.all.df.pre.res1$cases.averted.all)+averted.singleton.res1, digits=1)
+tots.averted.upper.res1<-round(mean(cases.averted.upper.res1$cases.averted.all)+averted.singleton.upper.res1, digits=1)
+tots.averted.lower.res1<-round(mean(cases.averted.lower.res1$cases.averted.all)+averted.singleton.lower.res1, digits=1)
+#TOTAL and 95 CI averted PER DAY
+tots.averted.day.res1<-round(tots.averted.res1/int.duration.one,digits=1)
+tots.averted.upper.day.res1<-round(tots.averted.upper.res1/int.duration.one,digits=1)
+tots.averted.lower.day.res1<-round(tots.averted.lower.res1/int.duration.one,digits=1)
+
+cat(paste0("Singletons observed during res1: ",
+           round(AUC.observed.sing.res1,digits=1)),
+    predicted.single.95ci.res1,
+    averted.single.95ci.res1,
+    averted.single.day.95ci.res1,
+    
+    ## TOTAL CASES AVERTED= sublineages + singeltons
+    paste0("TOTAL cases averted, sublin desc+singles, during res1: ",
+           tots.averted.res1," (",
+           tots.averted.lower.res1,"-",
+           tots.averted.upper.res1,")"),
+    
+    ## TOTAL CASES AVERTED Per day 
+    paste0("TOTAL cases averted per day, sublin desc+singles, during res1: ",
+           tots.averted.day.res1," (",
+           tots.averted.lower.day.res1,"-",
+           tots.averted.upper.day.res1,")"),
+   file=text.out, append=T,sep="\n")
+
+```
+
+## what were the total cases of variant in Canada and what were the averted cases as a percent of that
+```{r}
+meta.can.var.country.daily.full3<-read.csv(meta.can.var.country.in)
+
+can.var.cases<- meta.can.var.country.daily.full3 %>% 
+  filter(var.WHO==Focal.var)
+can.var.cases$date<-as.Date(can.var.cases$date)
+
+## estimated total alpha cases
+can.var.total.cases<-round(sum(can.var.cases$avgVOC_cases,na.rm=T)) #324,547
+can.var.total.cases.text<-paste0("Total estimated ",Focal.var,"\n cases in Canada: ",can.var.total.cases)
+
+#percentage averted of total
+percent.focal.averted.res1<-round(tots.averted.res1/can.var.total.cases*100,digits=1)
+percent.focal.averted.lower.res1<-round(tots.averted.lower.res1/can.var.total.cases*100,digits=1)
+percent.focal.averted.upper.res1<-round(tots.averted.upper.res1/can.var.total.cases*100,digits=1)
+
+
+## Plot cases with overlay for flight ban
+y.lim2<-c(0,(ceiling(max(can.var.cases$avgVOC_cases,na.rm=T))+1000))
+var.col<-varPalette.ch[which(names(varPalette.ch)==Focal.var)]
+
+p.can.var.cases<-ggplot(can.var.cases)+
+    annotate(geom="rect",xmin = as.Date(int.start.one), xmax = as.Date(int.end.one),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80")+
+      annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80")+
+    annotate(geom="text",x =( as.Date(int.start.one)+int.duration/2),
+             y=(y.lim2[2]/100)*99, vjust=1, hjust=0.5,
+             label=int.descrip,fontface="italic",color="grey25",size=3)+
+    # add annotation for total estimated cases
+    annotate(geom="label",x =int.start.one,
+             y=(y.lim2[2]/4)*3, vjust=1, hjust=0.6,
+             label=can.var.total.cases.text, size=3)+
+    pubThemeDate+
+    geom_bar(aes(x=date, y=avgVOC_cases),fill=var.col,stat="identity",width=1)+
+    scaleDateFlexLess+
+    scale_y_continuous(expand=c(0,0))+
+    # GlobFillScale+
+    theme(legend.position = "none")+
+    labs(x=NULL, y=paste0("Canada",": Average daily ",Focal.var," cases"))
+  
+p.can.var.cases
+ggsave(paste0(f.out,"canada.var.cases.png"),height=3,width=4,unit="in")
+
+
+## NEW
+## estimated total alpha cases during the intervention
+
+#1. overall
+can.var.cases.interv.res1<-can.var.cases %>% filter(date>=int.start.one & date<=int.end.one)
+can.var.total.cases.interv.res1<-round(sum(can.var.cases.interv.res1$avgVOC_cases,na.rm=T))
+can.var.total.cases.text.interv.res1<-paste0("Total estimated ",Focal.var,"\n cases in Canada during interv. res1: ",can.var.total.cases.interv.res1)
+
+percent.focal.averted.interv.res1<-round(tots.averted.res1/can.var.total.cases.interv.res1*100,digits=1)
+percent.focal.averted.lower.interv.res1<-round(tots.averted.lower.res1/can.var.total.cases.interv.res1*100,digits=1)
+percent.focal.averted.upper.interv.res1<-round(tots.averted.upper.res1/can.var.total.cases.interv.res1*100,digits=1)
+
+```
+
+## Add to text export
+```{r}
+cat(str_replace_all(can.var.total.cases.text,"\n",""),
+    str_replace_all(can.var.total.cases.text.interv.res1,"\n",""),
+
+    paste0("Percentage averted of total Canadian cases, res1: ",
+           percent.focal.averted.res1,
+           " (", percent.focal.averted.lower.res1,"-",
+           percent.focal.averted.upper.res1,")"),
+    
+    paste0("Percentage averted of total Canadian cases during interv res1: ",
+       percent.focal.averted.interv.res1,
+       " (", percent.focal.averted.lower.interv.res1,"-",
+       percent.focal.averted.upper.interv.res1,")"),
+    file=text.out, append=T,sep="\n")
+```
+
+
+## restriction 2
+```{r}
+#singleton rate right before the intervention 1:
+sing.Par.Roll.focal.pre<-sing.Par.Roll.summary %>% 
+  filter(par.state%in%focal.source) %>%
+  filter(tmrca.dt.half-14 <= (int.start))
+
+## join the focal cases to the importation rate pre intervention
+sing.Par.Roll.focal.pre$date<-sing.Par.Roll.focal.pre$tmrca.dt.half
+# class(focal.var.cases$tmrca.dt)
+focal.cases.intros.sing<-left_join(sing.Par.Roll.focal.pre, focal.var.cases, by="date")
+# head(focal.cases.intros.sing)
+
+#subset the data
+focal.cases.intros.sing.res<-focal.cases.intros.sing %>% 
+  filter(avgVOC_cases>subset)
+
+#Make a linear model
+#use this to predict the number of singletons averted based on cases
+#RESTRICT TO LOCAL
+lm.cases.intros.sing<-lm(data=focal.cases.intros.sing.res, intros_meansum7d.mean ~ avgVOC_cases)
+sing.lm.cases.intros.sing<-summary(lm.cases.intros.sing) #Adjusted R-squared:  0.9531 ,  p-value: < 2.2e-16
+sing.lm.cases.intros.sing
+adjustedr2<-round(sing.lm.cases.intros.sing$r.squared,digits = 3)
+text.adjustedr2<-paste0("Multiple R-squared = ",adjustedr2)
+
+#duplicate for use below
+text.adjustedr2.res2<-text.adjustedr2
+focal.cases.intros.sing.res.res2<-focal.cases.intros.sing.res
+
+#Relationship b/w cases in the UK And intros into Canada
+p.sing.focal.cases.intros.sing.res2<-ggplot(focal.cases.intros.sing,
+                             aes(x=avgVOC_cases,
+                                 y=intros_meansum7d.mean,color=country))+
+  geom_point()+
+  GlobColScale+
+  theme(legend.position = "none")+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var, " single./wk. from ",focal.source))+
+  geom_smooth(data=focal.cases.intros.sing.res.res2, method ="lm",se=T,level=0.95)+
+  pubTheme+
+  annotate(geom="label",
+           x=1,y=max(focal.cases.intros.sing$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2,hjust=0)
+
+p.sing.focal.cases.intros.sing.res2
+ggsave(paste0(f.out,"p.sing.focal.var.cases.intros.sing.lm.res2.png"),height=3,width=3,unit="in")
+
+#now predict number of singletons per week up until int.end
+focal.cases.new<-focal.var.cases %>% filter(date<=int.end & date>=int.start) 
+focal.var.cases.trav.dur.sing<-focal.cases.new$avgVOC_cases %>% as.data.frame()
+colnames(focal.var.cases.trav.dur.sing)<-"avgVOC_cases"
+new.vals<-predict.lm(lm.cases.intros.sing,newdata = focal.var.cases.trav.dur.sing,interval = "prediction")
+#join new vals on with the new cases data
+focal.var.cases.trav.dur.sing2<-focal.var.cases.trav.dur.sing %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur.sing2)[2:4]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur.sing2$country<-focal.source
+
+#plot this to see how many singletons there might have been during the ban
+p.sing.obs.fit<-ggplot(focal.var.cases.trav.dur.sing2,
+       aes(x=avgVOC_cases,y=intros_meansum7d.mean,group=country)) +
+    geom_ribbon(aes(ymin = lower,ymax = upper,fill=country),alpha=0.3)+
+  geom_point(aes(color=country))+
+  GlobColScale+
+  GlobFillScale+
+  theme(legend.position = "none")+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), 
+       y=paste0(Focal.var, " single./wk. from ",focal.source))
+p.sing.obs.fit
+## Join this onto the other dataset, and distinguish them as 'no restriction' (predicted) and 'restrictions' (observed)
+
+focal.cases.intros.sing2<-focal.cases.intros.sing[,c("avgVOC_cases","intros_meansum7d.mean","country")]
+focal.cases.intros.sing2$type<-"Observed"
+
+## Also need to add confidence intervals to the observed data that was fitted
+focal.cases.intros.sing2.new<-predict.lm(lm.cases.intros.sing,newdata = focal.cases.intros.sing2,interval = "prediction")
+#only want the upper and lower here
+focal.cases.intros.sing2.new<-focal.cases.intros.sing2.new[,c(2,3)]
+colnames(focal.cases.intros.sing2.new)<-c("lower","upper")
+focal.cases.intros.sing3<-focal.cases.intros.sing2 %>% bind_cols(focal.cases.intros.sing2.new)
+
+#join new vals on with the new cases data
+focal.var.cases.trav.dur.sing2<-focal.var.cases.trav.dur.sing %>% bind_cols(new.vals)
+colnames(focal.var.cases.trav.dur.sing2)[2:4]<-c("intros_meansum7d.mean","lower","upper")
+focal.var.cases.trav.dur.sing2$country<-focal.source
+focal.var.cases.trav.dur.sing2$type<-"Predicted"      
+focal.obs.pred<-bind_rows(focal.cases.intros.sing3,focal.var.cases.trav.dur.sing2)
+
+## colors for this
+pred.pal<-exp.obs.cols
+names(pred.pal)<-c("Observed","Predicted")
+## Plot and color by type
+p.sing.focal.obs.pred.res2<-ggplot(focal.obs.pred,
+       aes(x=avgVOC_cases,y=intros_meansum7d.mean,group=type)) +
+  geom_ribbon(aes(ymin = lower,ymax = upper,fill=type),alpha=0.5)+
+  geom_point(aes(color=type),alpha=0.8)+
+  labs(x=paste0("Daily ave. ",Focal.var," cases in ",focal.source), y=paste0(Focal.var, " single./wk. from ",focal.source))+
+  # geom_smooth(method ="lm",alpha=0.2,color=type)+
+  pubTheme+
+  theme(legend.position = c(0.2,0.7))+
+        # axis.title.x=element_text(margin = margin(t = -30)))+
+  scale_fill_manual(values=pred.pal)+
+  scale_color_manual(values=pred.pal)+
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+ 
+    annotate(geom="label",
+           x=min(focal.obs.pred$avgVOC_cases,na.rm=T),
+           y=max(focal.obs.pred$intros_meansum7d.mean,na.rm=T),
+           label=text.adjustedr2.res2,hjust=0,size=3)
+
+p.sing.focal.obs.pred.res2
+ggsave(paste0(f.out,"p.sing.obs.pred.res2.png"),height=3,width=3,unit="in")
+
+## Join the predicted values onto the data over time
+
+#get dates back in here
+focal.var.cases.trav.dur.sing3<-focal.var.cases.trav.dur.sing2 %>% left_join(focal.var.cases[,c("date","avgVOC_cases")],by="avgVOC_cases")
+focal.var.cases.trav.dur.sing3$type<-"Predicted"
+# head(focal.var.cases.trav.dur.sing3)
+
+focal.intros.sing.all<-sing.Par.Roll.summary %>% 
+  filter(par.state%in%focal.source)
+focal.intros.sing.all$type<-"Observed"
+focal.intros.sing.all$date<-focal.intros.sing.all$tmrca.dt
+# colnames(focal.var.cases.trav.dur.sing3)
+
+#duplicate for use below
+focal.var.cases.trav.dur.sing3.res2<-focal.var.cases.trav.dur.sing3
+
+### NOW plot this on the singletons per date
+pred.pal2<-pred.pal
+names(pred.pal2)<-c("Observed","Predicted")
+y.lim<-c(0,max(focal.var.cases.trav.dur.sing3$intros_meansum7d.mean)+3)
+
+p.sing.focal.pred.singleton.res2<-focal.intros.sing.all %>%
+  ggplot()+
+  pubThemeDate+
+  annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+    annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim[1], ymax =y.lim[2], color="grey85",size=0,  fill="grey80")+
+  annotate(geom="text",x = (as.Date(int.start)+int.duration/2),y=y.lim[2]-0.2, vjust=1, hjust=0.5,
+           label=int.descrip,fontface="italic",color="grey25",size=3)+
+  labs(x="Date of most recent common ancestor",y=paste0(paste0(Focal.var, " single./wk. from ",focal.source)))+
+  scaleDateFlexLess+
+  scale_y_continuous(expand=c(0,0))+
+  #observed
+   geom_line(aes(x=date,y=intros_meansum7d.mean,color=type),
+               stat="identity",size=1.5,alpha=0.7)+
+      geom_ribbon(aes(x=date,ymin=lower.CI,ymax=upper.CI,fill=type),
+               stat="identity",alpha=0.5)+
+  #predicted
+  geom_line(data=focal.var.cases.trav.dur.sing3.res2,aes(x=date,
+                                                    y=intros_meansum7d.mean,
+                                                    color=type),
+               stat="identity",size=1.5,alpha=0.7)+
+  
+  geom_ribbon(data=focal.var.cases.trav.dur.sing3.res2,aes(x=date,ymin=lower, ymax=upper,
+                                        fill=type), stat="identity",alpha=0.5)+
+  guides(color=guide_legend(title="Scenario"),
+         fill=guide_legend(title="Scenario"))+
+  theme(legend.position = c(0.6,0.8))+
+  scale_color_manual(values=pred.pal2)+
+  scale_fill_manual(values=pred.pal2)+
+  coord_cartesian(y=y.lim)
+p.sing.focal.pred.singleton.res2
+ggsave(paste0(f.out,"p.sing.focal.pred.singleton.res2.png"),height=3.5,width=3.5,unit="in")
+
+```
+
+## Calculate the difference in the area under curves
+```{r}
+#integrate stepwise daily 
+observed.df<-focal.intros.sing.all %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+observed.df<-observed.df %>%filter (!is.na(intros_meansum7d.mean))
+id<-order(observed.df$date)
+AUC.observed.sing.res2<-sum(diff(observed.df$date[id])*
+                  ((rollmean(observed.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+#divided by seven to convert it to per day instead of per week
+
+### Predicted:
+predicted.df<-focal.var.cases.trav.dur.sing3 %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","intros_meansum7d.mean"))
+id<-order(predicted.df$date)
+AUC.predicted.sing.res2<-sum(diff(predicted.df$date[id])*
+                  ((rollmean(predicted.df$intros_meansum7d.mean[id],2))/7) ) %>% as.numeric()
+
+#upper limit
+predicted.df.upper<-focal.var.cases.trav.dur.sing3 %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","upper"))
+id.upper<-order(predicted.df$date)
+AUC.predicted.sing.upper.res2<-sum(diff(predicted.df.upper$date[id.upper])*
+                  ((rollmean(predicted.df.upper$upper[id.upper],2))/7) ) %>% as.numeric()
+
+#lower limit
+predicted.df.lower<-focal.var.cases.trav.dur.sing3 %>% filter(date<=int.end & date>=int.start) %>% dplyr::select (c("date","lower"))
+id.lower<-order(predicted.df$date)
+AUC.predicted.sing.lower.res2<-sum(diff(predicted.df.lower$date[id.lower])*
+                  ((rollmean(predicted.df.lower$lower[id.lower],2))/7) ) %>% as.numeric()
+
+## differences
+averted.singleton.res2<-AUC.predicted.sing.res2 - AUC.observed.sing.res2
+averted.singleton.day.res2<-averted.singleton.res2/int.duration.one
+
+averted.singleton.upper.res2<-AUC.predicted.sing.upper.res2 - AUC.observed.sing.res2
+averted.singleton.upper.day.res2<-averted.singleton.upper.res2/int.duration.one
+
+averted.singleton.lower.res2<-AUC.predicted.sing.lower.res2 - AUC.observed.sing.res2
+averted.singleton.lower.day.res2<-averted.singleton.lower.res2/int.duration.one
+
+#compose sentecnces for text output
+predicted.single.95ci.res2<-paste0("singletons predicted res2: ", round(AUC.predicted.sing.res2,digits=1),
+       " (",round(AUC.predicted.sing.lower.res2,digits=1),
+       "-",round(AUC.predicted.sing.upper.res2,digits=1),")")
+
+averted.single.95ci.res2<-paste0("Singletons averted res2: ",round(averted.singleton.res2,digits=1),
+       " (",round(averted.singleton.lower.res2,digits=1),
+       "-",round(averted.singleton.upper.res2,digits=1),")")
+
+averted.single.day.95ci.res2<-paste0("Singletons averted per day res2: ", round(averted.singleton.day.res2,digits=1),
+       " (",round(averted.singleton.lower.day.res2,digits=1),
+       "-",round(averted.singleton.upper.day.res2,digits=1),")")
+```
+
+## Add to text export
+```{r}
+#TOTAL and 95 CI averted   
+tots.averted.res2<-round(mean(cases.averted.all.df.pre.res2$cases.averted.all)+averted.singleton.res2, digits=1)
+tots.averted.upper.res2<-round(mean(cases.averted.upper.res2$cases.averted.all)+averted.singleton.upper.res2, digits=1)
+tots.averted.lower.res2<-round(mean(cases.averted.lower.res2$cases.averted.all)+averted.singleton.lower.res2, digits=1)
+#TOTAL and 95 CI averted PER DAY
+tots.averted.day.res2<-round(tots.averted.res2/int.duration.one,digits=1)
+tots.averted.upper.day.res2<-round(tots.averted.upper.res2/int.duration.one,digits=1)
+tots.averted.lower.day.res2<-round(tots.averted.lower.res2/int.duration.one,digits=1)
+
+cat(paste0("Singletons observed during res2: ",
+           round(AUC.observed.sing.res2,digits=1)),
+    predicted.single.95ci.res2,
+    averted.single.95ci.res2,
+    averted.single.day.95ci.res2,
+    
+    ## TOTAL CASES AVERTED= sublineages + singeltons
+    paste0("TOTAL cases averted, sublin desc+singles, during res2: ",
+           tots.averted.res2," (",
+           tots.averted.lower.res2,"-",
+           tots.averted.upper.res2,")"),
+    
+    ## TOTAL CASES AVERTED Per day 
+    paste0("TOTAL cases averted per day, sublin desc+singles, during res2: ",
+           tots.averted.day.res2," (",
+           tots.averted.lower.day.res2,"-",
+           tots.averted.upper.day.res2,")"),
+   file=text.out, append=T,sep="\n")
+
+```
+
+## what were the total cases of variant in Canada and what were the averted cases as a percent of that
+```{r}
+meta.can.var.country.daily.full3<-read.csv(meta.can.var.country.in)
+
+can.var.cases<- meta.can.var.country.daily.full3 %>% 
+  filter(var.WHO==Focal.var)
+can.var.cases$date<-as.Date(can.var.cases$date)
+
+## estimated total alpha cases
+can.var.total.cases<-round(sum(can.var.cases$avgVOC_cases,na.rm=T)) #324,547
+can.var.total.cases.text<-paste0("Total estimated ",Focal.var,"\n cases in Canada: ",can.var.total.cases)
+
+#percentage averted of total
+percent.focal.averted.res2<-round(tots.averted.res2/can.var.total.cases*100,digits=1)
+percent.focal.averted.lower.res2<-round(tots.averted.lower.res2/can.var.total.cases*100,digits=1)
+percent.focal.averted.upper.res2<-round(tots.averted.upper.res2/can.var.total.cases*100,digits=1)
+
+
+## Plot cases with overlay for flight ban
+y.lim2<-c(0,(ceiling(max(can.var.cases$avgVOC_cases,na.rm=T))+1000))
+var.col<-varPalette.ch[which(names(varPalette.ch)==Focal.var)]
+
+p.can.var.cases<-ggplot(can.var.cases)+
+    annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80")+
+      annotate(geom="rect",xmin = as.Date(int.start), xmax = as.Date(int.end),
+             ymin = y.lim2[1], ymax =y.lim2[2],
+             color="grey85",size=0,  fill="grey80")+
+    annotate(geom="text",x =( as.Date(int.start)+int.duration/2),
+             y=(y.lim2[2]/100)*99, vjust=1, hjust=0.5,
+             label=int.descrip,fontface="italic",color="grey25",size=3)+
+    # add annotation for total estimated cases
+    annotate(geom="label",x =int.start,
+             y=(y.lim2[2]/4)*3, vjust=1, hjust=0.6,
+             label=can.var.total.cases.text, size=3)+
+    pubThemeDate+
+    geom_bar(aes(x=date, y=avgVOC_cases),fill=var.col,stat="identity",width=1)+
+    scaleDateFlexLess+
+    scale_y_continuous(expand=c(0,0))+
+    # GlobFillScale+
+    theme(legend.position = "none")+
+    labs(x=NULL, y=paste0("Canada",": Average daily ",Focal.var," cases"))
+  
+p.can.var.cases
+ggsave(paste0(f.out,"canada.var.cases.png"),height=3,width=4,unit="in")
+
+
+## NEW
+## estimated total alpha cases during the intervention
+
+#1. overall
+can.var.cases.interv.res2<-can.var.cases %>% filter(date>=int.start & date<=int.end)
+can.var.total.cases.interv.res2<-round(sum(can.var.cases.interv.res2$avgVOC_cases,na.rm=T))
+can.var.total.cases.text.interv.res2<-paste0("Total estimated ",Focal.var,"\n cases in Canada during interv. res2: ",can.var.total.cases.interv.res2)
+
+percent.focal.averted.interv.res2<-round(tots.averted.res2/can.var.total.cases.interv.res2*100,digits=1)
+percent.focal.averted.lower.interv.res2<-round(tots.averted.lower.res2/can.var.total.cases.interv.res2*100,digits=1)
+percent.focal.averted.upper.interv.res2<-round(tots.averted.upper.res2/can.var.total.cases.interv.res2*100,digits=1)
+
+```
+
+## Add to text export
+```{r}
+cat(str_replace_all(can.var.total.cases.text,"\n",""),
+    str_replace_all(can.var.total.cases.text.interv.res2,"\n",""),
+
+    paste0("Percentage averted of total Canadian cases, res2: ",
+           percent.focal.averted.res2,
+           " (", percent.focal.averted.lower.res2,"-",
+           percent.focal.averted.upper.res2,")"),
+    
+    paste0("Percentage averted of total Canadian cases during interv res2: ",
+       percent.focal.averted.interv.res2,
+       " (", percent.focal.averted.lower.interv.res2,"-",
+       percent.focal.averted.upper.interv.res2,")"),
+    file=text.out, append=T,sep="\n")
+```

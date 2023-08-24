@@ -1,0 +1,70 @@
+variant = gamma
+focal source geography = Brazil
+var-specific intervention = TRUE
+var-spec intervention 1: Brazil enhanced screening, from 2021-01-15 - 2021-02-22
+Intervention duration=38
+var-spec intervention 2: Brazil enhanced screening, from 2021-03-30 - 2021-04-14
+Intervention duration=15
+Period 1: 2021-01-15 - 2021-02-22; duration: 38
+Period 2: 2021-03-30 - 2021-04-14; duration: 15
+n.boots = 10
+folder.out = 2023-07-14_gamma_analysis/
+First Can sample: 2020-12-04
+Intervention delay = 116
+Travellers averted overall: 384
+Travellers averted overall per day: 5.05263157894737
+Travellers averted per 1: 326
+Travellers averted per 1  per day: 8.6
+Travellers averted per 2: 58
+Travellers averted per 2  per day: 3.9
+Models trained on data subsetted to cases > 5000
+Pearson's corr for cases vs sublin, full data: -0.05
+Pearson's corr for cases vs sublin, subsetted data: 0.83
+Pearson's corr for travel vs sublin, full data: 0.02
+Pearson's corr for travel vs sublin, subsetted data: 0.03
+Model subsetted data, sublin vs cases, Adj. R-squared = 0.684
+Model subsetted data, sublin vs cases adjusted trav, Adj. R-squared = 0.69
+LRT comparing travel adjuster, NA
+LRT comparing travel adjuster, 0.533253501896128
+Sublineages observed during restriction 1: 2.3
+Sublin predicted res1: 6.6 (5-8.2)
+Sublin averted res1: 4.3 (2.7-5.9)
+Sublin averted per day res1: 0.1 (0.1-0.2)
+Mean cases (sublin desc) averted res1, all source distrib, mean: 7932 (7368 - 8495)
+Mean cases (sublin desc) averted res1, all source,lower: 4081 (3692 - 4470)
+Mean cases (sublin desc) averted res1, all source, upper: 9839 (9224 - 10455)
+Pearson's corr for cases vs sublin,res2, full data: 0.73
+Pearson's corr for cases vs sublin,res2, subsetted data: -0.84
+Pearson's corr for travel vs sublin,res2, full data: -0.12
+Pearson's corr for travel vs sublin,res2, subsetted data: 0.05
+Model subsetted data, sublin vs cases,res2, Adj. R-squared = 0.701
+Model subsetted data, sublin vs cases adjusted trav,res2, Adj. R-squared = 0.752
+LRT comparing travel adjuster,res2, NA
+LRT comparing travel adjuster,res2, 0.0555448173743644
+Sublineages observed during restriction 2: 3
+Sublin predicted res2: 2.3 (1.4-3.2)
+Sublin averted res2: -0.7 (-1.6-0.2)
+Sublin averted per day res2: 0 (-0.1-0)
+Mean cases (sublin desc) averted res2, all source distrib, mean: 0 (0 - 0)
+Mean cases (sublin desc) averted res2, all source,lower: 0 (0 - 0)
+Mean cases (sublin desc) averted res2, all source, upper: 0 (0 - 0)
+Singletons observed during res1: 23.7
+singletons predicted res1: 27.4 (8.7-46.1)
+Singletons averted res1: 3.7 (-15-22.4)
+Singletons averted per day res1: 0.1 (-0.4-0.6)
+TOTAL cases averted, sublin desc+singles, during res1: 7935.4 (4066.2-9861.6)
+TOTAL cases averted per day, sublin desc+singles, during res1: 208.8 (107-259.5)
+Total estimated Gamma cases in Canada: 107697
+Total estimated Gamma cases in Canada during interv. res1: 931
+Percentage averted of total Canadian cases, res1: 7.4 (3.8-9.2)
+Percentage averted of total Canadian cases during interv res1: 852.4 (436.8-1059.2)
+Singletons observed during res2: 15.2
+singletons predicted res2: 17 (11.8-22.3)
+Singletons averted res2: 1.8 (-3.4-7.1)
+Singletons averted per day res2: 0 (-0.1-0.2)
+TOTAL cases averted, sublin desc+singles, during res2: 1.8 (-3.4-7.1)
+TOTAL cases averted per day, sublin desc+singles, during res2: 0 (-0.1-0.2)
+Total estimated Gamma cases in Canada: 107697
+Total estimated Gamma cases in Canada during interv. res2: 23767
+Percentage averted of total Canadian cases, res2: 0 (0-0)
+Percentage averted of total Canadian cases during interv res2: 0 (0-0)

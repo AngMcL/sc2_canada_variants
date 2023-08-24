@@ -1,0 +1,67 @@
+variant = alpha
+focal source geography = United Kingdom
+var-specific intervention = TRUE
+var-spec intervention: UK flight ban, from 2020-12-20 - 2021-01-06
+Intervention duration=17
+Period 1: 2020-12-20 - 2020-12-27; duration: 7
+Period 2: 2020-12-28 - 2021-01-06; duration: 9
+n.boots = 10
+folder.out = 2023-07-18_alpha_analysis/
+First Can sample: 2020-11-06
+Intervention delay = 44
+Travellers averted overall: 724
+Travellers averted overall per day: 42.6
+Travellers averted per 1: 293
+Travellers averted per 1  per day: 41.9
+Travellers averted per 2: 431
+Travellers averted per 2  per day: 47.9
+Models trained on data subsetted to cases > 5000
+Pearson's corr for cases vs sublin, full data: 0.95
+Pearson's corr for cases vs sublin, subsetted data: 0.96
+Pearson's corr for travel vs sublin, full data: 0.44
+Pearson's corr for travel vs sublin, subsetted data: -0.01
+Model subsetted data, sublin vs cases, Adj. R-squared = 0.923
+Model subsetted data, sublin vs cases adjusted trav, Adj. R-squared = 0.932
+LRT comparing travel adjuster, NA
+LRT comparing travel adjuster, 0.387646407457371
+Sublineages observed during restrictions: 9.3
+Sublin predicted: 21.4 (18-24.8)
+Sublin averted: 12.1 (8.7-15.5)
+Sublin averted per day: 0.7 (0.5-0.9)
+Sublin averted in period 1: 1.9 (1.1-2.7)
+Sublin averted per day in period 1: 0.3 (0.2-0.4)
+Sublin averted in period 2: 9.6 (7.2-12.1)
+Sublin averted per day in period 2: 1.1 (0.8-1.3)
+Mean cases (sublin desc) averted, all, mean: 5682 (5446 - 5917)
+Mean cases (sublin desc) averted, all,lower: 3849 (3656 - 4042)
+Mean cases (sublin desc) averted, all, upper: 7132 (6869 - 7396)
+Mean cases (sublin desc) averted, per1, mean: 485 (420 - 551)
+Mean cases (sublin desc) averted, per1,lower: 485 (420 - 551)
+Mean cases (sublin desc) averted, per1, upper: 991 (895 - 1087)
+Mean cases (sublin desc) averted, per2, mean: 4292 (4084 - 4499)
+Mean cases (sublin desc) averted, per2,lower: 3384 (3199 - 3569)
+Mean cases (sublin desc) averted, per2, upper: 5682 (5446 - 5917)
+Singletons observed during restrictions: 36.8
+singletons predicted: 95.2 (80.6-109.7)
+Singletons averted: 58.4 (43.8-72.9)
+Singletons averted per day: 3.4 (2.6-4.3)
+singleton averted in period 1: 11.3 (7.8-14.7)
+singleton averted per day in period 1: 1.6 (1.1-2.1)
+singleton averted in period 2: 44.6 (34.2-55.1)
+singleton averted per day in period 2: 5 (3.8-6.1)
+TOTAL cases averted, sublin desc+singles: 5739.9 (3893.2-7205.3)
+TOTAL cases averted per day, sublin desc+singles: 337.6 (229-423.8)
+TOTAL cases averted, sublin desc+singles, period 1: 496.7 (493.3-1005.4)
+TOTAL cases averted per day, sublin desc+singles, period 1: 71 (70.5-143.6)
+TOTAL cases averted, sublin desc+singles, period 2: 4336.2 (3417.9-5736.6)
+TOTAL cases averted per day, sublin desc+singles, period 2: 481.8 (379.8-637.4)
+Total estimated Alpha cases in Canada: 324547
+Total estimated Alpha cases in Canada during interv.: 4260
+Total estimated Alpha cases in Canada during per1.: 75
+Total estimated Alpha cases in Canada during per2.: 4185
+Percentage averted of total Canadian cases: 1.8 (1.2-2.2)
+Percentage averted during per 1 of total Canadian cases: 0.2 (0.2-0.3)
+Percentage averted during per 2 of total Canadian cases: 1.3 (1.1-1.8)
+Percentage averted of total Canadian cases during interv: 134.7 (91.4-169.1)
+Percentage averted of total Canadian cases during per1: 7653.2 (5190.9-9607.1)
+Percentage averted of total Canadian cases during per2: 137.2 (93-172.2)

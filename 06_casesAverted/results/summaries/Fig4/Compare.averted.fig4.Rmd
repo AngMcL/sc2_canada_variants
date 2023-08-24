@@ -1,0 +1,256 @@
+---
+title: "figure that"
+author: "Angela"
+date: '2023-01-04'
+output: html_document
+---
+
+## goals
+* read in the cases etc averted
+* summarize
+
+```{r}
+library(tidyverse)
+library(cowplot)
+
+
+today<-Sys.Date()
+f.out<-paste0(today,"_results/") 
+if(!dir.exists(f.out)){dir.create(f.out)}
+
+avert<-read.csv("../SummaryCasesAverted.csv")
+
+```
+
+#pub theme and colors
+```{r}
+pubTheme<-theme(#panel.grid.major = element_blank(), 
+            panel.grid.minor = element_blank(),
+            panel.background=element_rect("grey95"), axis.line = element_line(colour = "black"),
+            legend.key.size = unit(0.5,"line"),
+            text=element_text(size=10,face="bold"),
+            legend.text=element_text(size=6))
+
+#read in variant colors
+variant.colors.in<-"../../01_subSample/colors_out/variant_colors.tsv"
+varPalette<-read.table(variant.colors.in,sep="\t")
+
+## make color scheme
+var.colz<-as.character(varPalette$vars.ch)
+varPalette.ch<-row.names(varPalette)
+names(varPalette.ch)<-var.colz
+
+#restrict to vocs
+var.ord1<-avert$VOC
+varPalette.ch<-varPalette.ch[which(names(varPalette.ch) %in% var.ord1)]
+# add<-c(varPalette.ch[4],varPalette.ch[4])
+# names(add)<-c("Gamma 1","Gamma 2")
+# varPalette.ch<-c(varPalette.ch,add)
+
+## add separate colors for BA.1 and BA.1.1
+### add separate groups for each omicron group
+omis<-c("BA.1","BA.1.1")
+# https://www.colorhexa.com/ec9a91
+omiPalette.ch<-c("#e47266","#e8867b") 
+names(omiPalette.ch)<-omis
+
+#full palette
+morevarPal<-c(varPalette.ch,omiPalette.ch)
+# morevarPal<-morevarPal[-which(names(morevarPal)=="Gamma")]
+morevarPal<-morevarPal[c(1,2,4,3,5,6)]
+
+VOCColScale<-scale_colour_manual(name = "Variant",values = morevarPal,na.value=NULL)
+VOCFillScale<-scale_fill_manual(name = "Variant",values = morevarPal,na.value=NULL)
+
+```
+
+## Make long
+```{r}
+colnames(avert)
+# avert[1,]
+
+avert<-avert[which(avert$VOC!=""),]
+
+#cols that have ()
+splitters<-c(9:17,19,21)
+#make long - fold change and metric
+avert.l<-avert %>% 
+  pivot_longer(cols = splitters,names_to = "metric",values_to = "Averted") %>% 
+  as.data.frame()
+
+#string split the confidence interval for bars on plots
+# avert.l<-avert.l[,-3] #get rid of dis
+avert.l<-avert.l %>% 
+  separate("Averted",into=c("mean","lower","upper"),sep="\\(|\\-|\\)",remove=F)
+
+avert.l$mean<-as.numeric(avert.l$mean)
+avert.l$upper<-as.numeric(avert.l$upper)
+avert.l$lower<-as.numeric(avert.l$lower)
+
+head(avert.l)
+
+avert.l$Averted[avert.l$VOC =="Beta" & avert.l$metric=="total.cases.per.day"]
+ # "1019.9 (-4.2-2012.7)" "1648.2 (1228.9-2220)" "-2.2 (-4.8-0.3)"
+avert.l$Averted[avert.l$VOC =="Beta" & avert.l$metric=="percent.additional"]
+```
+
+## make a facetted plot, one panel for each metric
+```{r}
+# #separate gammas
+# gams1<-which(avert.l$variant=="Gamma" & avert.l$notes=="restriction1")
+# avert.l$variant[gams1]<-"Gamma 1"
+# 
+# gams2<-which(avert.l$variant=="Gamma" & avert.l$notes=="restriction2")
+# avert.l$variant[gams2]<-"Gamma 2"
+
+# for this one, have diff time categories (all, per1, per2)
+
+#make ordered factors
+var.ord<-unique(avert.l$VOC)
+avert.l$VOC<-factor(avert.l$VOC, levels=var.ord)
+
+#Make descriptive names for metrics
+unique(avert.l$metric)
+avert.l$metric.long<-str_replace_all(avert.l$metric,
+                                       c( "sublineage.per.day" = "Sublineages\naverted/day",
+                                          "sublineages"=  "Sublineages\naverted",
+                                          "singletons.per.day"  ="Singletons\naverted/day",
+                                          "singletons" = "Singletons\naverted",
+                                          "total.cases.per.day"= "Cases\naverted/day",
+                                          "total.cases"=  "Cases\naverted",
+                                          "percent.additional"="% additional\ncases"))
+#order metrics
+met.ord<-unique(avert.l$metric.long)
+met.ord
+avert.l$metric.long<-factor(avert.l$metric.long,
+                              levels=met.ord)
+
+## metrics to focus on
+mets<-unique(avert.l$metric)
+met.foc<-mets[c(1,2,6,7,8,9,10)]
+
+#make a different set of labels unique to each VOC for time period
+avert.l$period<-paste0(format(as.Date(avert.l$start),"%b %d %Y" )," - " ,
+                       format(as.Date(avert.l$end),"%b %d %Y" ))
+#manually add in year for the two instances where year cahnges in period
+# avert.l$period[str_which(avert.l$period,"Dec 20 - Jan 06 2021")]<-"Dec 20 2020 - Jan 06 2021"
+# avert.l$period[str_which(avert.l$period,"Dec 28 - Jan 06 2021")]<-"Dec 28 2020 - Jan 06 2021"
+
+#add descrip
+avert.l$period[avert.l$time=="all"]<-paste0("Entire intervention:\n", avert.l$period[avert.l$time=="all"])
+avert.l$period[avert.l$time=="period 1"]<-paste0("Period 1:\n", avert.l$period[avert.l$time=="period 1"])
+avert.l$period[avert.l$time=="period 2"]<-paste0("Period 2:\n", avert.l$period[avert.l$time=="period 2"])
+
+#Manually change label for Gamma
+avert.l$period[avert.l$VOC=="Gamma"]<-str_replace_all(avert.l$period[avert.l$VOC=="Gamma"], "Period", "Intervention")
+
+#order
+pers<-unique(avert.l$period)
+avert.l$period<-factor(avert.l$period, levels=pers)
+
+## Plot dat, all on the floor
+avert.l %>%
+  filter(metric %in% met.foc) %>%
+  ggplot()+
+  geom_point(aes(x=period, y=mean, color=VOC, fill=VOC),
+             size=2, shape=23,alpha=0.9)+
+  geom_errorbar(aes(ymin=lower, ymax=upper,x=period, color=VOC), 
+                width=.2,alpha=0.9) +
+  VOCColScale+
+  VOCFillScale+
+  pubTheme+
+  labs(x=NULL,y=NULL)+
+  theme(legend.position = "none",
+        axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        strip.text.x=element_text(face="bold",size=rel(1.5)),
+        strip.text.y=element_text(face="bold",size=rel(1.2)))+
+  # scale_y_continuous(breaks=seq(0,ylim,2))+
+  facet_grid(metric.long ~ VOC ,scales="free",switch = "y")
+ggsave(paste0(f.out,"fig4_averted.png"),width=8, height=8,units="in")
+
+
+### Work on cleaning up the confidence intevals esp where missing
+## add gridlines
+## 
+
+
+```
+
+## total number of averted cases and introductions
+```{r}
+avert.l %>%
+  filter(metric=="total.cases") %>%
+  filter(time=="all") %>%
+  summarize(sumcases=sum(mean)) #36127.1
+
+tot<-36127 
+prob.hosp<-0.01
+#1093.9/100000 
+# May 2020 through April 2021 #https://publichealth.jmir.org/2022/6/e34296
+
+prob.icu<-0.21
+prob.dead<-0.26
+cost.hosp<-16000
+cost.icu<-61000
+
+hosp.cases<-tot*prob.hosp #361.27 hosp cases
+icu.cases<-hosp.cases*prob.icu #75.8667
+dead.cases<-icu.cases*prob.dead #19.72534
+nonicu.cost<-(hosp.cases-icu.cases)*cost.hosp #4,566,453
+icu.cost<-icu.cases*cost.icu #4,627,869
+totalcost<-nonicu.cost+icu.cost
+totalcost #9,194,322
+```
+
+
+## old script to make separate plots for each metric
+```{r}
+# head(avert)
+# colnames(avert)
+
+avert.l1<-avert.l %>% filter(metric=="fc.sublin.2wk")
+
+#separate gammas
+gams<-which(avert.l1$variant=="Gamma")
+avert.l1$variant[gams[1]]<-"Gamma\nrestr.1"
+avert.l1$variant[gams[2]]<-"Gamma\nrestr.2"
+
+var.ord<-unique(avert.l1$variant)
+avert.l1$variant<-factor(avert.l1$variant, levels=c(var.ord))
+
+
+ylim<-ceiling(max(avert.l1$upper,na.rm=T))
+fold.plot1<-ggplot(avert.l1)+
+  geom_hline(yintercept =1,linetype=3)+
+  geom_point(aes(x=variant, y=mean, color=variant, fill=variant),stat="identity", size=4, shape=23)+
+  geom_errorbar(aes(ymin=lower, ymax=upper,x=variant, color=variant), width=.1,alpha=0.6) +
+  VOCColScale+
+  VOCFillScale+
+  pubTheme+
+  labs(x=NULL,y="Fold-reduction sublineage\nimportation rate, focal, 2-wk")+
+  theme(legend.position = "none")+
+  scale_y_continuous(breaks=seq(0,ylim,1))
+fold.plot1
+
+avert.l2<-avert.l %>% filter(metric=="fc.sublin.prop")
+
+#separate gammas
+gams<-which(avert.l2$variant=="Gamma")
+avert.l2$variant[gams[1]]<-"Gamma\nrestr.1"
+avert.l2$variant[gams[2]]<-"Gamma\nrestr.2"
+var.ord<-unique(avert.l2$variant)
+avert.l2$variant<-factor(avert.l2$variant, levels=c(var.ord))
+
+ylim2<-ceiling(max(avert.l2$upper,na.rm=T))
+fold.plot2<-ggplot(avert.l2)+
+    geom_hline(yintercept =1,linetype=3)+
+   geom_point(aes(x=variant, y=mean, color=variant, fill=variant),stat="identity", size=4, shape=23)+
+  geom_errorbar(aes(ymin=lower, ymax=upper,x=variant, color=variant), width=.1,alpha=0.6) +
+  VOCColScale+
+  VOCFillScale+  pubTheme+
+  labs(x=NULL,y="Fold-reduction proportion\nsublineages from focal before vs during")+
+  theme(legend.position = "none")+
+  scale_y_continuous(breaks=seq(0,ylim2,1))
+fold.plot2
+```
+

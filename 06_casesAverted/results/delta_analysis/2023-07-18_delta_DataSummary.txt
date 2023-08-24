@@ -1,0 +1,67 @@
+variant = delta
+focal source geography = India
+var-specific intervention = TRUE
+var-spec intervention: India flight ban, from 2021-04-22 - 2021-09-26
+Intervention duration=157
+Period 1: 2021-04-22 - 2021-06-30; duration: 69
+Period 2: 2021-07-01 - 2021-09-26; duration: 87
+n.boots = 7
+folder.out = 2023-07-18_delta_analysis/
+First Can sample: 2021-03-06
+Intervention delay = 47
+Travellers averted overall: 5148
+Travellers averted overall per day: 32.8
+Travellers averted per 1: 2288
+Travellers averted per 1  per day: 33.2
+Travellers averted per 2: 2860
+Travellers averted per 2  per day: 32.9
+Models trained on data subsetted to date greater than 2021-04-11
+Pearson's corr for cases vs sublin, full data: 0.83
+Pearson's corr for cases vs sublin, subsetted data: 1
+Pearson's corr for travel vs sublin, full data: 0.22
+Pearson's corr for travel vs sublin, subsetted data: 0.3
+Model subsetted data, sublin vs cases, Adj. R-squared = 0.991
+Model subsetted data, sublin vs cases adjusted trav, Adj. R-squared = 0.691
+LRT comparing travel adjuster, NA
+LRT comparing travel adjuster, 0.600172856933442
+Sublineages observed during restrictions: 62.7
+Sublin predicted: 258.5 (237.1-279.8)
+Sublin averted: 195.7 (174.4-217)
+Sublin averted per day: 1.2 (1.1-1.4)
+Sublin averted in period 1: 129.6 (119.5-139.6)
+Sublin averted per day in period 1: 1.9 (1.7-2)
+Sublin averted in period 2: 65.4 (54.2-76.6)
+Sublin averted per day in period 2: 0.8 (0.6-0.9)
+Mean cases (sublin desc) averted, all, mean: 25935 (25188 - 26681)
+Mean cases (sublin desc) averted, all,lower: 23136 (22431 - 23841)
+Mean cases (sublin desc) averted, all, upper: 29108 (28325 - 29891)
+Mean cases (sublin desc) averted, per1, mean: 17229 (16630 - 17828)
+Mean cases (sublin desc) averted, per1,lower: 15889 (15308 - 16470)
+Mean cases (sublin desc) averted, per1, upper: 18542 (17919 - 19165)
+Mean cases (sublin desc) averted, per2, mean: 8728 (8280 - 9175)
+Mean cases (sublin desc) averted, per2,lower: 7418 (7000 - 7837)
+Mean cases (sublin desc) averted, per2, upper: 10180 (9700 - 10661)
+Singletons observed during restrictions: 143.7
+singletons predicted: 131.2 (76.9-185.5)
+Singletons averted: -12.5 (-66.8-41.8)
+Singletons averted per day: -0.1 (-0.4-0.3)
+singleton averted in period 1: 141.4 (115.8-167)
+singleton averted per day in period 1: 2 (1.7-2.4)
+singleton averted in period 2: -152.8 (-181.2--124.4)
+singleton averted per day in period 2: -1.8 (-2.1--1.4)
+TOTAL cases averted, sublin desc+singles: 25922.3 (23068.8-29149.4)
+TOTAL cases averted per day, sublin desc+singles: 165.1 (146.9-185.7)
+TOTAL cases averted, sublin desc+singles, period 1: 17370.5 (16004.9-18709.1)
+TOTAL cases averted per day, sublin desc+singles, period 1: 251.7 (232-271.1)
+TOTAL cases averted, sublin desc+singles, period 2: 8575.1 (7237.1-10055.8)
+TOTAL cases averted per day, sublin desc+singles, period 2: 98.6 (83.2-115.6)
+Total estimated Delta cases in Canada: 491733
+Total estimated Delta cases in Canada during interv.: 200150
+Total estimated Delta cases in Canada during per1.: 24663
+Total estimated Delta cases in Canada during per2.: 175488
+Percentage averted of total Canadian cases: 5.3 (4.7-5.9)
+Percentage averted during per 1 of total Canadian cases: 3.5 (3.3-3.8)
+Percentage averted during per 2  of total Canadian cases: 1.7 (1.5-2)
+Percentage averted of total Canadian cases during interv: 13 (11.5-14.6)
+Percentage averted of total Canadian cases during per1: 105.1 (93.5-118.2)
+Percentage averted of total Canadian cases during per2: 14.8 (13.1-16.6)

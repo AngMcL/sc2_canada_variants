@@ -1,0 +1,67 @@
+variant = beta
+focal source geography = South Africa
+var-specific intervention = TRUE
+var-spec intervention: South Africa enhanced screening, from 2020-12-24 - 2021-02-22
+Intervention duration=60
+Period 1: 2020-12-24 - 2021-01-21; duration: 28
+Period 2: 2021-01-22 - 2021-02-22; duration: 31
+n.boots = 10
+folder.out = 2023-07-18_beta_analysis/
+First Can sample: 2020-12-19
+Intervention delay = 5
+Travellers averted overall: 3
+Travellers averted overall per day: 0
+Travellers averted per 1: 5
+Travellers averted per 1  per day: 0.2
+Travellers averted per 2: -2
+Travellers averted per 2  per day: -0.1
+Models trained on data subsetted to cases > 6000
+Pearson's corr for cases vs sublin, full data: 0.63
+Pearson's corr for cases vs sublin, subsetted data: 0.94
+Pearson's corr for travel vs sublin, full data: 0.05
+Pearson's corr for travel vs sublin, subsetted data: -0.16
+Model subsetted data, sublin vs cases, Adj. R-squared = 0.882
+Model subsetted data, sublin vs cases adjusted trav, Adj. R-squared = 0.886
+LRT comparing travel adjuster, NA
+LRT comparing travel adjuster, 0.600172856933442
+Sublineages observed during restrictions: 2.2
+Sublin predicted: 7.3 (2.3-12.3)
+Sublin averted: 5 (0-10)
+Sublin averted per day: 0.1 (0-0.2)
+Sublin averted in period 1: 8.7 (6.1-11.3)
+Sublin averted per day in period 1: 0.3 (0.2-0.4)
+Sublin averted in period 2: -3.9 (-6.2--1.6)
+Sublin averted per day in period 2: -0.1 (-0.2--0.1)
+Mean cases (sublin desc) averted, all, mean: 1019 (945 - 1093)
+Mean cases (sublin desc) averted, all,lower: 0 (0 - 0)
+Mean cases (sublin desc) averted, all, upper: 2006 (1902 - 2111)
+Mean cases (sublin desc) averted, per1, mean: 1645 (1551 - 1739)
+Mean cases (sublin desc) averted, per1,lower: 1228 (1147 - 1310)
+Mean cases (sublin desc) averted, per1, upper: 2214 (2106 - 2322)
+Mean cases (sublin desc) averted, per2, mean: 0 (0 - 0)
+Mean cases (sublin desc) averted, per2,lower: 0 (0 - 0)
+Mean cases (sublin desc) averted, per2, upper: 0 (0 - 0)
+Singletons observed during restrictions: 4.3
+singletons predicted: 5.4 (0-10.7)
+Singletons averted: 1.1 (-4.2-6.4)
+Singletons averted per day: 0 (-0.1-0.1)
+singleton averted in period 1: 3.2 (0.5-6)
+singleton averted per day in period 1: 0.1 (0-0.2)
+singleton averted in period 2: -2.2 (-4.8-0.3)
+singleton averted per day in period 2: -0.1 (-0.2-0)
+TOTAL cases averted, sublin desc+singles: 1019.9 (-4.2-2012.7)
+TOTAL cases averted per day, sublin desc+singles: 17 (-0.1-33.5)
+TOTAL cases averted, sublin desc+singles, period 1: 1648.2 (1228.9-2220)
+TOTAL cases averted per day, sublin desc+singles, period 1: 58.9 (43.9-79.3)
+TOTAL cases averted, sublin desc+singles, period 2: -2.2 (-4.8-0.3)
+TOTAL cases averted per day, sublin desc+singles, period 2: -0.1 (-0.2-0)
+Total estimated Beta cases in Canada: 12462
+Total estimated Beta cases in Canada during interv.: 2836
+Total estimated Beta cases in Canada during per1.: 1387
+Total estimated Beta cases in Canada during per2.: 1450
+Percentage averted of total Canadian cases: 8.2 (0-16.2)
+Percentage averted during per 1 of total Canadian cases: 13.2 (9.9-17.8)
+Percentage averted during per 2  of total Canadian cases: 0 (0-0)
+Percentage averted of total Canadian cases during interv: 36 (-0.1-71)
+Percentage averted of total Canadian cases during per1: 73.5 (-0.3-145.1)
+Percentage averted of total Canadian cases during per2: 70.3 (-0.3-138.8)
