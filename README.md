@@ -2,8 +2,8 @@
 Angela McLaughlin et al. 
 
 ## Description
-Scripts needed to reproduce our analysis as described in the manuscript, 'Effectiveness of Canadian travel restrictions in reducing burden of SARS-CoV-2 variants of concern'
-pre-print [available here](https://www.medrxiv.org/content/10.1101/2023.09.12.23294140v1).
+Scripts to reproduce the analysis as described in our manuscript, 'Effectiveness of Canadian travel restrictions in reducing burden of SARS-CoV-2 variants of concern',
+[pre-print available here](https://www.medrxiv.org/content/10.1101/2023.09.12.23294140v1).
 
 ## Dependencies
 This pipeline was developed on mac OX Monterey 12.15.1 and tested on Ventura 13.5.2.
